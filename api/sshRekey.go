@@ -62,7 +62,7 @@ func (h *caHandler) SSHRekey(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, errs.Unauthorized(err))
 		return
 	}
-	oldCert, err := provisioner.ExtractSSHPOPCert(body.OTT)
+	oldCert, _, err := provisioner.ExtractSSHPOPCert(body.OTT)
 	if err != nil {
 		WriteError(w, errs.InternalServerError(err))
 	}

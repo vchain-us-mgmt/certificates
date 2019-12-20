@@ -19,6 +19,7 @@ import (
 	"github.com/smallstep/cli/crypto/pemutil"
 	"github.com/smallstep/cli/crypto/randutil"
 	"github.com/smallstep/cli/jose"
+	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -237,6 +238,46 @@ func generateK8sSA(inputPubKey interface{}) (*K8sSA, error) {
 		audiences: testAudiences,
 		claimer:   claimer,
 		pubKeys:   pubKeys,
+	}, nil
+}
+
+func generateSSHPOP() (*SSHPOP, error) {
+	name, err := randutil.Alphanumeric(10)
+	if err != nil {
+		return nil, err
+	}
+	claimer, err := NewClaimer(nil, globalProvisionerClaims)
+	if err != nil {
+		return nil, err
+	}
+
+	userB, err := ioutil.ReadFile("./testdata/certs/ssh_user_ca_key.pub")
+	if err != nil {
+		return nil, err
+	}
+	userKey, _, _, _, err := ssh.ParseAuthorizedKey(userB)
+	if err != nil {
+		return nil, err
+	}
+	hostB, err := ioutil.ReadFile("./testdata/certs/ssh_host_ca_key.pub")
+	if err != nil {
+		return nil, err
+	}
+	hostKey, _, _, _, err := ssh.ParseAuthorizedKey(hostB)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SSHPOP{
+		Name:      name,
+		Type:      "SSHPOP",
+		Claims:    &globalProvisionerClaims,
+		audiences: testAudiences,
+		claimer:   claimer,
+		sshPubKeys: &SSHKeys{
+			UserKeys: []ssh.PublicKey{userKey},
+			HostKeys: []ssh.PublicKey{hostKey},
+		},
 	}, nil
 }
 
@@ -586,6 +627,18 @@ func withX5CHdr(certs []*x509.Certificate) tokOption {
 		}
 		so.WithHeader("x5c", strs)
 		return nil
+	}
+}
+
+func withSSHPOPFile(certFile string, key interface{}) tokOption {
+	return func(so *jose.SignerOptions) error {
+		certStrs, err := jose.ValidateSSHPOP(certFile, key)
+		if err != nil {
+			return errors.Wrap(err, "error validating SSH certificate and key for use in sshpop header")
+		}
+		so.WithHeader("sshpop", certStrs)
+		return nil
+
 	}
 }
 
