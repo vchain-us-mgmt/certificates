@@ -630,13 +630,9 @@ func withX5CHdr(certs []*x509.Certificate) tokOption {
 	}
 }
 
-func withSSHPOPFile(certFile string, key interface{}) tokOption {
+func withSSHPOPFile(cert *ssh.Certificate) tokOption {
 	return func(so *jose.SignerOptions) error {
-		certStrs, err := jose.ValidateSSHPOP(certFile, key)
-		if err != nil {
-			return errors.Wrap(err, "error validating SSH certificate and key for use in sshpop header")
-		}
-		so.WithHeader("sshpop", certStrs)
+		so.WithHeader("sshpop", base64.StdEncoding.EncodeToString(cert.Marshal()))
 		return nil
 
 	}

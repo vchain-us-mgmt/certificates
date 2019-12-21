@@ -118,14 +118,14 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 	// Check validity period of the certificate.
 	n := time.Now()
 	if sshCert.ValidAfter != 0 && time.Unix(int64(sshCert.ValidAfter), 0).After(n) {
-		return nil, errors.New("authorizeToken: sshpop certificate validAfter is in the future")
+		return nil, errs.Unauthorized(errors.New("authorizeToken: sshpop certificate validAfter is in the future"))
 	}
 	if sshCert.ValidBefore != 0 && time.Unix(int64(sshCert.ValidBefore), 0).Before(n) {
-		return nil, errors.New("authorizeToken: sshpop certificate validBefore is in the past")
+		return nil, errs.Unauthorized(errors.New("authorizeToken: sshpop certificate validBefore is in the past"))
 	}
 	sshCryptoPubKey, ok := sshCert.Key.(ssh.CryptoPublicKey)
 	if !ok {
-		return nil, errors.New("ssh public key could not be cast to ssh CryptoPublicKey")
+		return nil, errs.InternalServerError(errors.New("authorizeToken: sshpop public key could not be cast to ssh CryptoPublicKey"))
 	}
 	pubKey := sshCryptoPubKey.CryptoPublicKey()
 
@@ -146,7 +146,7 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 		}
 	}
 	if !found {
-		return nil, errors.New("error: provisioner could could not verify the sshpop header certificate")
+		return nil, errs.Unauthorized(errors.New("authorizeToken: could not find valid ca signer to verify sshpop certificate"))
 	}
 
 	// Using the ssh certificates key to validate the claims accomplishes two
@@ -156,7 +156,7 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 	//   2. Asserts that the claims are valid - have not been tampered with.
 	var claims sshPOPPayload
 	if err = jwt.Claims(pubKey, &claims); err != nil {
-		return nil, errors.Wrap(err, "error parsing claims")
+		return nil, errs.Wrap(http.StatusBadRequest, err, "authorizeToken: error parsing sshpop token claims")
 	}
 
 	// According to "rfc7519 JSON Web Token" acceptable skew should be no
@@ -165,16 +165,17 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 		Issuer: p.Name,
 		Time:   time.Now().UTC(),
 	}, time.Minute); err != nil {
-		return nil, errors.Wrapf(err, "invalid token")
+		return nil, errs.Wrap(http.StatusBadRequest, err, "authorizeToken: invalid sshpop token")
 	}
 
 	// validate audiences with the defaults
 	if !matchesAudience(claims.Audience, audiences) {
-		return nil, errors.New("invalid token: invalid audience claim (aud)")
+		return nil, errs.BadRequest(errors.Errorf("authorizeToken: sshpop token has invalid audience "+
+			"claim (aud): expected %s, but got %s", audiences, claims.Audience))
 	}
 
 	if claims.Subject == "" {
-		return nil, errors.New("token subject cannot be empty")
+		return nil, errs.BadRequest(errors.New("authorizeToken: sshpop token subject cannot be empty"))
 	}
 
 	claims.sshCert = sshCert
