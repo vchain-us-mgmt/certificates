@@ -634,7 +634,6 @@ func withSSHPOPFile(cert *ssh.Certificate) tokOption {
 	return func(so *jose.SignerOptions) error {
 		so.WithHeader("sshpop", base64.StdEncoding.EncodeToString(cert.Marshal()))
 		return nil
-
 	}
 }
 

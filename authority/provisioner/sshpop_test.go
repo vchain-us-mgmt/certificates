@@ -1,8 +1,11 @@
 package provisioner
 
 import (
+	"context"
 	"crypto"
 	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"net/http"
 	"testing"
 	"time"
@@ -37,7 +40,7 @@ func TestSSHPOP_Getters(t *testing.T) {
 }
 
 func createSSHCert(cert *ssh.Certificate, signer ssh.Signer) (*ssh.Certificate, *jose.JSONWebKey, error) {
-	jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+	jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "foo", 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,7 +81,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusBadRequest,
-				err:   errors.New("authorizeToken: error extracting sshpop header from token: error parsing token: "),
+				err:   errors.New("authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
 			}
 		},
 		"fail/error-revoked-db-check": func(t *testing.T) test {
@@ -300,111 +303,63 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 	}
 }
 
-/*
-func TestSSHPOP_AuthorizeSign(t *testing.T) {
-	type test struct {
-		p     *SSHPOP
-		token string
-		ctx   context.Context
-		err   error
-	}
-	tests := map[string]func(*testing.T) test{
-		"fail/invalid-token": func(t *testing.T) test {
-			p, err := generateSSHPOP()
-			assert.FatalError(t, err)
-			return test{
-				p:     p,
-				token: "foo",
-				err:   errors.New("error parsing token"),
-			}
-		},
-		"fail/ssh-unimplemented": func(t *testing.T) test {
-			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
-			assert.FatalError(t, err)
-			p, err := generateSSHPOP()
-			assert.FatalError(t, err)
-			tok, err := generateSSHPOPToken(jwk, nil)
-			assert.FatalError(t, err)
-			return test{
-				p:     p,
-				ctx:   NewContextWithMethod(context.Background(), SignSSHMethod),
-				token: tok,
-				err:   errors.Errorf("ssh certificates not enabled for k8s ServiceAccount provisioners"),
-			}
-		},
-		"ok": func(t *testing.T) test {
-			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
-			assert.FatalError(t, err)
-			p, err := generateSSHPOP()
-			assert.FatalError(t, err)
-			tok, err := generateSSHPOPToken(jwk, nil)
-			assert.FatalError(t, err)
-			return test{
-				p:     p,
-				ctx:   NewContextWithMethod(context.Background(), SignMethod),
-				token: tok,
-			}
-		},
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			tc := tt(t)
-			if opts, err := tc.p.AuthorizeSign(tc.ctx, tc.token); err != nil {
-				if assert.NotNil(t, tc.err) {
-					assert.HasPrefix(t, err.Error(), tc.err.Error())
-				}
-			} else {
-				if assert.Nil(t, tc.err) {
-					if assert.NotNil(t, opts) {
-						tot := 0
-						for _, o := range opts {
-							switch v := o.(type) {
-							case *provisionerExtensionOption:
-								assert.Equals(t, v.Type, int(TypeSSHPOP))
-								assert.Equals(t, v.Name, tc.p.GetName())
-								assert.Equals(t, v.CredentialID, "")
-								assert.Len(t, 0, v.KeyValuePairs)
-							case profileDefaultDuration:
-								assert.Equals(t, time.Duration(v), tc.p.claimer.DefaultTLSCertDuration())
-							case defaultPublicKeyValidator:
-							case *validityValidator:
-								assert.Equals(t, v.min, tc.p.claimer.MinTLSCertDuration())
-								assert.Equals(t, v.max, tc.p.claimer.MaxTLSCertDuration())
-							default:
-								assert.FatalError(t, errors.Errorf("unexpected sign option of type %T", v))
-							}
-							tot++
-						}
-						assert.Equals(t, tot, 4)
-					}
-				}
-			}
-		})
-	}
-}
+func TestSSHPOP_AuthorizeSSHRevoke(t *testing.T) {
+	key, err := pemutil.Read("./testdata/secrets/ssh_user_ca_key")
+	assert.FatalError(t, err)
+	signer, ok := key.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh signing key to crypto signer")
+	sshSigner, err := ssh.NewSignerFromSigner(signer)
+	assert.FatalError(t, err)
 
-func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 	type test struct {
 		p     *SSHPOP
 		token string
 		err   error
+		code  int
 	}
 	tests := map[string]func(*testing.T) test{
-		"fail/invalid-token": func(t *testing.T) test {
+		"fail/bad-token": func(t *testing.T) test {
 			p, err := generateSSHPOP()
 			assert.FatalError(t, err)
 			return test{
 				p:     p,
 				token: "foo",
-				err:   errors.New("error parsing token"),
+				code:  http.StatusBadRequest,
+				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+			}
+		},
+		"fail/subject-not-equal-serial": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{CertType: ssh.UserCert}, sshSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("foo", p.GetName(), testAudiences.SSHRevoke[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusBadRequest,
+				err:   errors.New("authoritzeSSHRevoke: sshpop token subject must be equivalent to sshpop certificate serial number"),
 			}
 		},
 		"ok": func(t *testing.T) test {
-			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
-			assert.FatalError(t, err)
 			p, err := generateSSHPOP()
 			assert.FatalError(t, err)
-			tok, err := generateSSHPOPToken(jwk, nil)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{Serial: 123455, CertType: ssh.UserCert}, sshSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", p.GetName(), testAudiences.SSHRevoke[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
 			assert.FatalError(t, err)
 			return test{
 				p:     p,
@@ -415,7 +370,10 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			tc := tt(t)
-			if err := tc.p.AuthorizeRevoke(context.TODO(), tc.token); err != nil {
+			if err := tc.p.AuthorizeSSHRevoke(context.Background(), tc.token); err != nil {
+				sc, ok := err.(errs.StatusCoder)
+				assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+				assert.Equals(t, sc.StatusCode(), tc.code)
 				if assert.NotNil(t, tc.err) {
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
@@ -426,36 +384,427 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 	}
 }
 
-func TestSSHPOP_AuthorizeRenew(t *testing.T) {
-	p1, err := generateSSHPOP()
+func TestSSHPOP_AuthorizeSSHRenew(t *testing.T) {
+	key, err := pemutil.Read("./testdata/secrets/ssh_user_ca_key")
 	assert.FatalError(t, err)
-	p2, err := generateSSHPOP()
-	assert.FatalError(t, err)
-
-	// disable renewal
-	disable := true
-	p2.Claims = &Claims{DisableRenewal: &disable}
-	p2.claimer, err = NewClaimer(p2.Claims, globalProvisionerClaims)
+	userSigner, ok := key.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh user signing key to crypto signer")
+	sshUserSigner, err := ssh.NewSignerFromSigner(userSigner)
 	assert.FatalError(t, err)
 
-	type args struct {
-		cert *x509.Certificate
+	hostKey, err := pemutil.Read("./testdata/secrets/ssh_host_ca_key")
+	assert.FatalError(t, err)
+	hostSigner, ok := hostKey.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh host signing key to crypto signer")
+	sshHostSigner, err := ssh.NewSignerFromSigner(hostSigner)
+	assert.FatalError(t, err)
+
+	type test struct {
+		p     *SSHPOP
+		token string
+		cert  *ssh.Certificate
+		err   error
+		code  int
 	}
-	tests := []struct {
-		name    string
-		prov    *SSHPOP
-		args    args
-		wantErr bool
-	}{
-		{"ok", p1, args{nil}, false},
-		{"fail", p2, args{nil}, true},
+	tests := map[string]func(*testing.T) test{
+		"fail/bad-token": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusBadRequest,
+				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+			}
+		},
+		"fail/not-host-cert": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{CertType: ssh.UserCert}, sshUserSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("foo", p.GetName(), testAudiences.SSHRenew[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusBadRequest,
+				err:   errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{Serial: 123455, CertType: ssh.HostCert}, sshHostSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", p.GetName(), testAudiences.SSHRenew[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				cert:  cert,
+			}
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.prov.AuthorizeRenew(context.TODO(), tt.args.cert); (err != nil) != tt.wantErr {
-				t.Errorf("X5C.AuthorizeRenew() error = %v, wantErr %v", err, tt.wantErr)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if cert, err := tc.p.AuthorizeSSHRenew(context.Background(), tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				if assert.Nil(t, tc.err) {
+					assert.Equals(t, tc.cert.Nonce, cert.Nonce)
+				}
 			}
 		})
 	}
 }
-*/
+
+func TestSSHPOP_AuthorizeSSHRekey(t *testing.T) {
+	key, err := pemutil.Read("./testdata/secrets/ssh_user_ca_key")
+	assert.FatalError(t, err)
+	userSigner, ok := key.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh user signing key to crypto signer")
+	sshUserSigner, err := ssh.NewSignerFromSigner(userSigner)
+	assert.FatalError(t, err)
+
+	hostKey, err := pemutil.Read("./testdata/secrets/ssh_host_ca_key")
+	assert.FatalError(t, err)
+	hostSigner, ok := hostKey.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh host signing key to crypto signer")
+	sshHostSigner, err := ssh.NewSignerFromSigner(hostSigner)
+	assert.FatalError(t, err)
+
+	type test struct {
+		p     *SSHPOP
+		token string
+		cert  *ssh.Certificate
+		err   error
+		code  int
+	}
+	tests := map[string]func(*testing.T) test{
+		"fail/bad-token": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusBadRequest,
+				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+			}
+		},
+		"fail/not-host-cert": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{CertType: ssh.UserCert}, sshUserSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("foo", p.GetName(), testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusBadRequest,
+				err:   errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			p.db = &db.MockAuthDB{
+				MIsSSHRevoked: func(sn string) (bool, error) {
+					return false, nil
+				},
+			}
+			cert, jwk, err := createSSHCert(&ssh.Certificate{Serial: 123455, CertType: ssh.HostCert}, sshHostSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", p.GetName(), testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				cert:  cert,
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if cert, opts, err := tc.p.AuthorizeSSHRekey(context.Background(), tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				if assert.Nil(t, tc.err) {
+					assert.Len(t, 3, opts)
+					for _, o := range opts {
+						switch v := o.(type) {
+						case *sshDefaultPublicKeyValidator:
+						case *sshCertificateDefaultValidator:
+						case *sshCertificateValidityValidator:
+							assert.Equals(t, v.Claimer, tc.p.claimer)
+						default:
+							assert.FatalError(t, errors.Errorf("unexpected sign option of type %T", v))
+						}
+					}
+					assert.Equals(t, tc.cert.Nonce, cert.Nonce)
+				}
+			}
+		})
+	}
+}
+
+func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
+	hostKey, err := pemutil.Read("./testdata/secrets/ssh_host_ca_key")
+	assert.FatalError(t, err)
+	hostSigner, ok := hostKey.(crypto.Signer)
+	assert.Fatal(t, ok, "could not cast ssh host signing key to crypto signer")
+	sshHostSigner, err := ssh.NewSignerFromSigner(hostSigner)
+	assert.FatalError(t, err)
+
+	type test struct {
+		token string
+		cert  *ssh.Certificate
+		jwk   *jose.JSONWebKey
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"fail/bad-token": func(t *testing.T) test {
+			return test{
+				token: "foo",
+				err:   errors.New("extractSSHPOPCert: error parsing token"),
+			}
+		},
+		"fail/sshpop-missing": func(t *testing.T) test {
+			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+			assert.FatalError(t, err)
+			tok, err := generateToken("sub", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk)
+			assert.FatalError(t, err)
+			return test{
+				token: tok,
+				err:   errors.New("extractSSHPOPCert: token missing sshpop header"),
+			}
+		},
+		"fail/wrong-sshpop-type": func(t *testing.T) test {
+			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, func(so *jose.SignerOptions) error {
+					so.WithHeader("sshpop", 12345)
+					return nil
+				})
+			assert.FatalError(t, err)
+			return test{
+				token: tok,
+				err:   errors.New("extractSSHPOPCert: error unexpected type for sshpop header: "),
+			}
+		},
+		"fail/base64decode-error": func(t *testing.T) test {
+			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, func(so *jose.SignerOptions) error {
+					so.WithHeader("sshpop", "!@#$%^&*")
+					return nil
+				})
+			assert.FatalError(t, err)
+			return test{
+				token: tok,
+				err:   errors.New("extractSSHPOPCert: error base64 decoding sshpop header: illegal base64"),
+			}
+		},
+		"fail/parsing-sshpop-pubkey": func(t *testing.T) test {
+			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, func(so *jose.SignerOptions) error {
+					so.WithHeader("sshpop", base64.StdEncoding.EncodeToString([]byte("foo")))
+					return nil
+				})
+			assert.FatalError(t, err)
+			return test{
+				token: tok,
+				err:   errors.New("extractSSHPOPCert: error parsing ssh public key"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			cert, jwk, err := createSSHCert(&ssh.Certificate{Serial: 123455, CertType: ssh.HostCert}, sshHostSigner)
+			assert.FatalError(t, err)
+			tok, err := generateToken("123455", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
+				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return test{
+				token: tok,
+				jwk:   jwk,
+				cert:  cert,
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if cert, jwt, err := ExtractSSHPOPCert(tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				if assert.Nil(t, tc.err) {
+					assert.Equals(t, tc.cert.Nonce, cert.Nonce)
+					assert.Equals(t, tc.jwk.KeyID, jwt.Headers[0].KeyID)
+				}
+			}
+		})
+	}
+}
+
+func TestSSHPOP_AuthorizeSSHSign(t *testing.T) {
+	type test struct {
+		token string
+		p     Interface
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"ok/not-implemented": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				token: "foo",
+				p:     p,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHSign"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if opts, err := tc.p.AuthorizeSSHSign(context.Background(), tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.Nil(t, opts)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				assert.Nil(t, tc.err)
+			}
+		})
+	}
+}
+
+func TestSSHPOP_AuthorizeSign(t *testing.T) {
+	type test struct {
+		token string
+		p     Interface
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"ok/not-implemented": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				token: "foo",
+				p:     p,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeSign"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if opts, err := tc.p.AuthorizeSign(context.Background(), tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.Nil(t, opts)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				assert.Nil(t, tc.err)
+			}
+		})
+	}
+}
+
+func TestSSHPOP_AuthorizeRenew(t *testing.T) {
+	type test struct {
+		cert *x509.Certificate
+		p    Interface
+		err  error
+	}
+	tests := map[string]func(*testing.T) test{
+		"ok/not-implemented": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				cert: &x509.Certificate{},
+				p:    p,
+				err:  errors.New("not implemented; provisioner does not implement AuthorizeRenew"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if err := tc.p.AuthorizeRenew(context.Background(), tc.cert); err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				assert.Nil(t, tc.err)
+			}
+		})
+	}
+}
+
+func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
+	type test struct {
+		token string
+		p     Interface
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"ok/not-implemented": func(t *testing.T) test {
+			p, err := generateSSHPOP()
+			assert.FatalError(t, err)
+			return test{
+				token: "foo",
+				p:     p,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if err := tc.p.AuthorizeRevoke(context.Background(), tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				assert.Nil(t, tc.err)
+			}
+		})
+	}
+}

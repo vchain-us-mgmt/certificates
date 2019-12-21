@@ -187,12 +187,13 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 func (p *SSHPOP) AuthorizeSSHRevoke(ctx context.Context, token string) error {
 	claims, err := p.authorizeToken(token, p.audiences.SSHRevoke)
 	if err != nil {
-		return err
+		return errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHRevoke")
 	}
 	if claims.Subject != strconv.FormatUint(claims.sshCert.Serial, 10) {
-		return errors.New("token subject must be equivalent to certificate serial number")
+		return errs.BadRequest(errors.New("authoritzeSSHRevoke: sshpop token subject " +
+			"must be equivalent to sshpop certificate serial number"))
 	}
-	return err
+	return nil
 }
 
 // AuthorizeSSHRenew validates the authorization token and extracts/validates
@@ -200,10 +201,10 @@ func (p *SSHPOP) AuthorizeSSHRevoke(ctx context.Context, token string) error {
 func (p *SSHPOP) AuthorizeSSHRenew(ctx context.Context, token string) (*ssh.Certificate, error) {
 	claims, err := p.authorizeToken(token, p.audiences.SSHRenew)
 	if err != nil {
-		return nil, err
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHRevoke")
 	}
 	if claims.sshCert.CertType != ssh.HostCert {
-		return nil, errors.New("sshpop AuthorizeSSHRenew: sshpop certificate must be a host ssh certificate")
+		return nil, errs.BadRequest(errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"))
 	}
 
 	return claims.sshCert, nil
@@ -215,10 +216,10 @@ func (p *SSHPOP) AuthorizeSSHRenew(ctx context.Context, token string) (*ssh.Cert
 func (p *SSHPOP) AuthorizeSSHRekey(ctx context.Context, token string) (*ssh.Certificate, []SignOption, error) {
 	claims, err := p.authorizeToken(token, p.audiences.SSHRekey)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHRevoke")
 	}
 	if claims.sshCert.CertType != ssh.HostCert {
-		return nil, nil, errors.New("sshpop AuthorizeSSHRekey: sshpop certificate must be a host ssh certificate")
+		return nil, nil, errs.BadRequest(errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"))
 	}
 	return claims.sshCert, []SignOption{
 		// Validate public key
@@ -236,29 +237,29 @@ func (p *SSHPOP) AuthorizeSSHRekey(ctx context.Context, token string) (*ssh.Cert
 func ExtractSSHPOPCert(token string) (*ssh.Certificate, *jose.JSONWebToken, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
-		return nil, nil, errors.Wrapf(err, "error parsing token")
+		return nil, nil, errors.Wrapf(err, "extractSSHPOPCert: error parsing token")
 	}
 
 	encodedSSHCert, ok := jwt.Headers[0].ExtraHeaders["sshpop"]
 	if !ok {
-		return nil, nil, errors.New("token missing sshpop header")
+		return nil, nil, errors.New("extractSSHPOPCert: token missing sshpop header")
 	}
 	encodedSSHCertStr, ok := encodedSSHCert.(string)
 	if !ok {
-		return nil, nil, errors.Errorf("error unexpected type for sshpop header: "+
+		return nil, nil, errors.Errorf("extractSSHPOPCert: error unexpected type for sshpop header: "+
 			"want 'string', but got '%T'", encodedSSHCert)
 	}
 	sshCertBytes, err := base64.StdEncoding.DecodeString(encodedSSHCertStr)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "error decoding sshpop header")
+		return nil, nil, errors.Wrap(err, "extractSSHPOPCert: error base64 decoding sshpop header")
 	}
 	sshPub, err := ssh.ParsePublicKey(sshCertBytes)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "error parsing ssh public key")
+		return nil, nil, errors.Wrap(err, "extractSSHPOPCert: error parsing ssh public key")
 	}
 	sshCert, ok := sshPub.(*ssh.Certificate)
 	if !ok {
-		return nil, nil, errors.New("error converting ssh public key to ssh certificate")
+		return nil, nil, errors.New("extractSSHPOPCert: error converting ssh public key to ssh certificate")
 	}
 	return sshCert, jwt, nil
 }

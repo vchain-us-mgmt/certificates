@@ -276,7 +276,7 @@ func TestJWK_AuthorizeSign(t *testing.T) {
 							assert.Equals(t, time.Duration(v), tt.prov.claimer.DefaultTLSCertDuration())
 						case commonNameValidator:
 							assert.Equals(t, string(v), "subject")
-						case defaultPublicKeyValidator:
+						case *defaultPublicKeyValidator:
 						case dnsNamesValidator:
 							assert.Equals(t, []string(v), tt.dns)
 						case emailAddressesValidator:
