@@ -678,6 +678,24 @@ func generateToken(sub, iss, aud string, email string, sans []string, iat time.T
 	return jose.Signed(sig).Claims(claims).CompactSerialize()
 }
 
+func generateX5CSSHToken(jwk *jose.JSONWebKey, claims *x5cPayload, tokOpts ...tokOption) (string, error) {
+	so := new(jose.SignerOptions)
+	so.WithType("JWT")
+	so.WithHeader("kid", jwk.KeyID)
+
+	for _, o := range tokOpts {
+		if err := o(so); err != nil {
+			return "", err
+		}
+	}
+
+	sig, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.ES256, Key: jwk.Key}, so)
+	if err != nil {
+		return "", err
+	}
+	return jose.Signed(sig).Claims(claims).CompactSerialize()
+}
+
 func getK8sSAPayload() *k8sSAPayload {
 	return &k8sSAPayload{
 		Claims: jose.Claims{
