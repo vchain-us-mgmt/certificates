@@ -80,7 +80,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: "foo",
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
 			}
 		},
@@ -118,7 +118,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: sshpop certificate is revoked"),
 			}
 		},
@@ -202,7 +202,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: error parsing sshpop token claims"),
 			}
 		},
@@ -222,7 +222,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: invalid sshpop token"),
 			}
 		},
@@ -242,7 +242,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: sshpop token has invalid audience claim (aud)"),
 			}
 		},
@@ -262,7 +262,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeToken: sshpop token subject cannot be empty"),
 			}
 		},
@@ -324,7 +324,7 @@ func TestSSHPOP_AuthorizeSSHRevoke(t *testing.T) {
 			return test{
 				p:     p,
 				token: "foo",
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
 			}
 		},
@@ -413,7 +413,7 @@ func TestSSHPOP_AuthorizeSSHRenew(t *testing.T) {
 			return test{
 				p:     p,
 				token: "foo",
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
 			}
 		},
@@ -505,7 +505,7 @@ func TestSSHPOP_AuthorizeSSHRekey(t *testing.T) {
 			return test{
 				p:     p,
 				token: "foo",
-				code:  http.StatusBadRequest,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
 			}
 		},
@@ -687,6 +687,7 @@ func TestSSHPOP_AuthorizeSSHSign(t *testing.T) {
 	type test struct {
 		token string
 		p     Interface
+		code  int
 		err   error
 	}
 	tests := map[string]func(*testing.T) test{
@@ -696,6 +697,7 @@ func TestSSHPOP_AuthorizeSSHSign(t *testing.T) {
 			return test{
 				token: "foo",
 				p:     p,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHSign"),
 			}
 		},
@@ -706,6 +708,9 @@ func TestSSHPOP_AuthorizeSSHSign(t *testing.T) {
 			if opts, err := tc.p.AuthorizeSSHSign(context.Background(), tc.token); err != nil {
 				if assert.NotNil(t, tc.err) {
 					assert.Nil(t, opts)
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
 			} else {
@@ -719,6 +724,7 @@ func TestSSHPOP_AuthorizeSign(t *testing.T) {
 	type test struct {
 		token string
 		p     Interface
+		code  int
 		err   error
 	}
 	tests := map[string]func(*testing.T) test{
@@ -728,6 +734,7 @@ func TestSSHPOP_AuthorizeSign(t *testing.T) {
 			return test{
 				token: "foo",
 				p:     p,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("not implemented; provisioner does not implement AuthorizeSign"),
 			}
 		},
@@ -738,6 +745,9 @@ func TestSSHPOP_AuthorizeSign(t *testing.T) {
 			if opts, err := tc.p.AuthorizeSign(context.Background(), tc.token); err != nil {
 				if assert.NotNil(t, tc.err) {
 					assert.Nil(t, opts)
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
 			} else {
@@ -751,6 +761,7 @@ func TestSSHPOP_AuthorizeRenew(t *testing.T) {
 	type test struct {
 		cert *x509.Certificate
 		p    Interface
+		code int
 		err  error
 	}
 	tests := map[string]func(*testing.T) test{
@@ -760,6 +771,7 @@ func TestSSHPOP_AuthorizeRenew(t *testing.T) {
 			return test{
 				cert: &x509.Certificate{},
 				p:    p,
+				code: http.StatusUnauthorized,
 				err:  errors.New("not implemented; provisioner does not implement AuthorizeRenew"),
 			}
 		},
@@ -769,6 +781,9 @@ func TestSSHPOP_AuthorizeRenew(t *testing.T) {
 			tc := tt(t)
 			if err := tc.p.AuthorizeRenew(context.Background(), tc.cert); err != nil {
 				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
 			} else {
@@ -782,6 +797,7 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 	type test struct {
 		token string
 		p     Interface
+		code  int
 		err   error
 	}
 	tests := map[string]func(*testing.T) test{
@@ -791,6 +807,7 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 			return test{
 				token: "foo",
 				p:     p,
+				code:  http.StatusUnauthorized,
 				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
 			}
 		},
@@ -800,6 +817,9 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 			tc := tt(t)
 			if err := tc.p.AuthorizeRevoke(context.Background(), tc.token); err != nil {
 				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
 			} else {

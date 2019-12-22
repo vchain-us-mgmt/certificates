@@ -103,7 +103,7 @@ func (p *SSHPOP) Init(config Config) error {
 func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayload, error) {
 	sshCert, jwt, err := ExtractSSHPOPCert(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusBadRequest, err,
+		return nil, errs.Wrap(http.StatusUnauthorized, err,
 			"authorizeToken: error extracting sshpop header from token")
 	}
 
@@ -112,7 +112,7 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 		return nil, errs.Wrap(http.StatusInternalServerError, err,
 			"authorizeToken: error checking checking sshpop cert revocation")
 	} else if isRevoked {
-		return nil, errs.BadRequest(errors.New("authorizeToken: sshpop certificate is revoked"))
+		return nil, errs.Unauthorized(errors.New("authorizeToken: sshpop certificate is revoked"))
 	}
 
 	// Check validity period of the certificate.
@@ -156,7 +156,7 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 	//   2. Asserts that the claims are valid - have not been tampered with.
 	var claims sshPOPPayload
 	if err = jwt.Claims(pubKey, &claims); err != nil {
-		return nil, errs.Wrap(http.StatusBadRequest, err, "authorizeToken: error parsing sshpop token claims")
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: error parsing sshpop token claims")
 	}
 
 	// According to "rfc7519 JSON Web Token" acceptable skew should be no
@@ -165,17 +165,17 @@ func (p *SSHPOP) authorizeToken(token string, audiences []string) (*sshPOPPayloa
 		Issuer: p.Name,
 		Time:   time.Now().UTC(),
 	}, time.Minute); err != nil {
-		return nil, errs.Wrap(http.StatusBadRequest, err, "authorizeToken: invalid sshpop token")
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: invalid sshpop token")
 	}
 
 	// validate audiences with the defaults
 	if !matchesAudience(claims.Audience, audiences) {
-		return nil, errs.BadRequest(errors.Errorf("authorizeToken: sshpop token has invalid audience "+
+		return nil, errs.Unauthorized(errors.Errorf("authorizeToken: sshpop token has invalid audience "+
 			"claim (aud): expected %s, but got %s", audiences, claims.Audience))
 	}
 
 	if claims.Subject == "" {
-		return nil, errs.BadRequest(errors.New("authorizeToken: sshpop token subject cannot be empty"))
+		return nil, errs.Unauthorized(errors.New("authorizeToken: sshpop token subject cannot be empty"))
 	}
 
 	claims.sshCert = sshCert

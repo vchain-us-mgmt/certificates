@@ -10,6 +10,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/authority/provisioner"
+	"github.com/smallstep/certificates/db"
 	"github.com/smallstep/cli/crypto/pemutil"
 	"github.com/smallstep/cli/crypto/randutil"
 	"github.com/smallstep/cli/jose"
@@ -157,8 +158,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 		},
 		"ok/mockNoSQLDB": func(t *testing.T) *authorizeTest {
 			_a := testAuthority(t)
-			_a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			_a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return true, nil
 				},
 			}
@@ -180,8 +181,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 		},
 		"fail/mockNoSQLDB/error": func(t *testing.T) *authorizeTest {
 			_a := testAuthority(t)
-			_a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			_a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return false, errors.New("force")
 				},
 			}
@@ -205,8 +206,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 		},
 		"fail/mockNoSQLDB/token-already-used": func(t *testing.T) *authorizeTest {
 			_a := testAuthority(t)
-			_a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			_a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return false, nil
 				},
 			}
@@ -561,8 +562,8 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 	tests := map[string]func(t *testing.T) *authorizeTest{
 		"fail/db.IsRevoked-error": func(t *testing.T) *authorizeTest {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isRevoked: func(key string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsRevoked: func(key string) (bool, error) {
 					return false, errors.New("force")
 				},
 			}
@@ -576,8 +577,8 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 		},
 		"fail/revoked": func(t *testing.T) *authorizeTest {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isRevoked: func(key string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsRevoked: func(key string) (bool, error) {
 					return true, nil
 				},
 			}
@@ -590,8 +591,8 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 		},
 		"fail/load-provisioner": func(t *testing.T) *authorizeTest {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isRevoked: func(key string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsRevoked: func(key string) (bool, error) {
 					return false, nil
 				},
 			}
@@ -604,8 +605,8 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 		},
 		"fail/provisioner-authorize-renewal-fail": func(t *testing.T) *authorizeTest {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isRevoked: func(key string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsRevoked: func(key string) (bool, error) {
 					return false, nil
 				},
 			}
@@ -619,8 +620,8 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 		},
 		"ok": func(t *testing.T) *authorizeTest {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isRevoked: func(key string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsRevoked: func(key string) (bool, error) {
 					return false, nil
 				},
 			}

@@ -205,7 +205,7 @@ func generateJWK() (*JWK, error) {
 }
 
 func generateK8sSA(inputPubKey interface{}) (*K8sSA, error) {
-	fooPubB, err := ioutil.ReadFile("./testdata/foo.pub")
+	fooPubB, err := ioutil.ReadFile("./testdata/certs/foo.pub")
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func generateK8sSA(inputPubKey interface{}) (*K8sSA, error) {
 	if err != nil {
 		return nil, err
 	}
-	barPubB, err := ioutil.ReadFile("./testdata/bar.pub")
+	barPubB, err := ioutil.ReadFile("./testdata/certs/bar.pub")
 	if err != nil {
 		return nil, err
 	}

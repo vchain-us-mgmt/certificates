@@ -498,8 +498,8 @@ func TestAuthority_CheckSSHHost(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				isSSHHost: func(_ string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MIsSSHHost: func(_ string) (bool, error) {
 					return tt.fields.exists, tt.fields.err
 				},
 			}

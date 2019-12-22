@@ -237,8 +237,8 @@ ZYtQ9Ot36qc=
 		"fail store cert in db": func(t *testing.T) *signTest {
 			csr := getCSR(t, priv)
 			_a := testAuthority(t)
-			_a.db = &MockAuthDB{
-				storeCertificate: func(crt *x509.Certificate) error {
+			_a.db = &db.MockAuthDB{
+				MStoreCertificate: func(crt *x509.Certificate) error {
 					return &apiError{errors.New("force"),
 						http.StatusInternalServerError,
 						apiCtx{"csr": csr, "signOptions": signOpts}}
@@ -258,8 +258,8 @@ ZYtQ9Ot36qc=
 		"ok": func(t *testing.T) *signTest {
 			csr := getCSR(t, priv)
 			_a := testAuthority(t)
-			_a.db = &MockAuthDB{
-				storeCertificate: func(crt *x509.Certificate) error {
+			_a.db = &db.MockAuthDB{
+				MStoreCertificate: func(crt *x509.Certificate) error {
 					assert.Equals(t, crt.Subject.CommonName, "smallstep test")
 					return nil
 				},
@@ -672,11 +672,11 @@ func TestRevoke(t *testing.T) {
 		},
 		"error/db-revoke": func() test {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return true, nil
 				},
-				err: errors.New("force"),
+				Err: errors.New("force"),
 			}
 
 			cl := jwt.Claims{
@@ -708,11 +708,11 @@ func TestRevoke(t *testing.T) {
 		},
 		"error/already-revoked": func() test {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return true, nil
 				},
-				err: db.ErrAlreadyExists,
+				Err: db.ErrAlreadyExists,
 			}
 
 			cl := jwt.Claims{
@@ -744,8 +744,8 @@ func TestRevoke(t *testing.T) {
 		},
 		"ok/token": func() test {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{
-				useToken: func(id, tok string) (bool, error) {
+			a.db = &db.MockAuthDB{
+				MUseToken: func(id, tok string) (bool, error) {
 					return true, nil
 				},
 			}
@@ -772,7 +772,7 @@ func TestRevoke(t *testing.T) {
 		},
 		"error/mTLS/authorizeRevoke": func() test {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{}
+			a.db = &db.MockAuthDB{}
 
 			crt, err := pemutil.ReadCertificate("./testdata/certs/foo.crt")
 			assert.FatalError(t, err)
@@ -796,7 +796,7 @@ func TestRevoke(t *testing.T) {
 		},
 		"ok/mTLS": func() test {
 			a := testAuthority(t)
-			a.db = &MockAuthDB{}
+			a.db = &db.MockAuthDB{}
 
 			crt, err := pemutil.ReadCertificate("./testdata/certs/foo.crt")
 			assert.FatalError(t, err)
