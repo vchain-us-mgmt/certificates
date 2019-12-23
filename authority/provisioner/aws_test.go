@@ -576,9 +576,8 @@ func TestAWS_AuthorizeSSHSign(t *testing.T) {
 	assert.FatalError(t, err)
 	defer srv.Close()
 
-	p2, srv2, err := generateAWSWithServer()
+	p2, err := generateAWS()
 	assert.FatalError(t, err)
-	defer srv2.Close()
 	// disable sshCA
 	disable := false
 	p2.Claims = &Claims{EnableSSHCA: &disable}
