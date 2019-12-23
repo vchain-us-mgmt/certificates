@@ -488,45 +488,9 @@ func TestAzure_AuthorizeRenew(t *testing.T) {
 			if err := tt.azure.AuthorizeRenew(context.TODO(), tt.args.cert); (err != nil) != tt.wantErr {
 				t.Errorf("Azure.AuthorizeRenew() error = %v, wantErr %v", err, tt.wantErr)
 			} else if err != nil {
-				fmt.Println("hello")
 				sc, ok := err.(errs.StatusCoder)
 				assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 				assert.Equals(t, sc.StatusCode(), tt.code)
-			}
-		})
-	}
-}
-
-func TestAzure_AuthorizeRevoke(t *testing.T) {
-	type test struct {
-		p     *Azure
-		token string
-		code  int
-		err   error
-	}
-	tests := map[string]func(*testing.T) test{
-		"not-implemented": func(t *testing.T) test {
-			p, _, err := generateAzureWithServer()
-			assert.FatalError(t, err)
-			return test{
-				p:     p,
-				token: "foo",
-				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
-			}
-		},
-	}
-	for name, tt := range tests {
-		t.Run(name, func(t *testing.T) {
-			tc := tt(t)
-			err := tc.p.AuthorizeRevoke(context.Background(), tc.token)
-			if assert.NotNil(t, err) {
-				if assert.NotNil(t, tc.err) {
-					sc, ok := err.(errs.StatusCoder)
-					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
-					assert.Equals(t, sc.StatusCode(), tc.code)
-					assert.HasPrefix(t, err.Error(), tc.err.Error())
-				}
 			}
 		})
 	}
@@ -539,6 +503,14 @@ func TestAzure_AuthorizeSSHSign(t *testing.T) {
 	p1, srv, err := generateAzureWithServer()
 	assert.FatalError(t, err)
 	defer srv.Close()
+
+	p2, err := generateAzure()
+	assert.FatalError(t, err)
+	// disable sshCA
+	disable := false
+	p2.Claims = &Claims{EnableSSHCA: &disable}
+	p2.claimer, err = NewClaimer(p2.Claims, globalProvisionerClaims)
+	assert.FatalError(t, err)
 
 	t1, err := p1.GetIdentityToken("subject", "caURL")
 	assert.FatalError(t, err)
@@ -571,18 +543,21 @@ func TestAzure_AuthorizeSSHSign(t *testing.T) {
 		azure       *Azure
 		args        args
 		expected    *SSHOptions
+		code        int
 		wantErr     bool
 		wantSignErr bool
 	}{
-		{"ok", p1, args{t1, SSHOptions{}, pub}, expectedHostOptions, false, false},
-		{"ok-rsa2048", p1, args{t1, SSHOptions{}, rsa2048.Public()}, expectedHostOptions, false, false},
-		{"ok-type", p1, args{t1, SSHOptions{CertType: "host"}, pub}, expectedHostOptions, false, false},
-		{"ok-principals", p1, args{t1, SSHOptions{Principals: []string{"virtualMachine"}}, pub}, expectedHostOptions, false, false},
-		{"ok-options", p1, args{t1, SSHOptions{CertType: "host", Principals: []string{"virtualMachine"}}, pub}, expectedHostOptions, false, false},
-		{"fail-rsa1024", p1, args{t1, SSHOptions{}, rsa1024.Public()}, expectedHostOptions, false, true},
-		{"fail-type", p1, args{t1, SSHOptions{CertType: "user"}, pub}, nil, false, true},
-		{"fail-principal", p1, args{t1, SSHOptions{Principals: []string{"smallstep.com"}}, pub}, nil, false, true},
-		{"fail-extra-principal", p1, args{t1, SSHOptions{Principals: []string{"virtualMachine", "smallstep.com"}}, pub}, nil, false, true},
+		{"ok", p1, args{t1, SSHOptions{}, pub}, expectedHostOptions, http.StatusOK, false, false},
+		{"ok-rsa2048", p1, args{t1, SSHOptions{}, rsa2048.Public()}, expectedHostOptions, http.StatusOK, false, false},
+		{"ok-type", p1, args{t1, SSHOptions{CertType: "host"}, pub}, expectedHostOptions, http.StatusOK, false, false},
+		{"ok-principals", p1, args{t1, SSHOptions{Principals: []string{"virtualMachine"}}, pub}, expectedHostOptions, http.StatusOK, false, false},
+		{"ok-options", p1, args{t1, SSHOptions{CertType: "host", Principals: []string{"virtualMachine"}}, pub}, expectedHostOptions, http.StatusOK, false, false},
+		{"fail-rsa1024", p1, args{t1, SSHOptions{}, rsa1024.Public()}, expectedHostOptions, http.StatusOK, false, true},
+		{"fail-type", p1, args{t1, SSHOptions{CertType: "user"}, pub}, nil, http.StatusOK, false, true},
+		{"fail-principal", p1, args{t1, SSHOptions{Principals: []string{"smallstep.com"}}, pub}, nil, http.StatusOK, false, true},
+		{"fail-extra-principal", p1, args{t1, SSHOptions{Principals: []string{"virtualMachine", "smallstep.com"}}, pub}, nil, http.StatusOK, false, true},
+		{"fail-sshCA-disabled", p2, args{"foo", SSHOptions{}, pub}, expectedHostOptions, http.StatusUnauthorized, true, false},
+		{"fail-invalid-token", p1, args{"foo", SSHOptions{}, pub}, expectedHostOptions, http.StatusUnauthorized, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -593,6 +568,9 @@ func TestAzure_AuthorizeSSHSign(t *testing.T) {
 				return
 			}
 			if err != nil {
+				sc, ok := err.(errs.StatusCoder)
+				assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+				assert.Equals(t, sc.StatusCode(), tt.code)
 				assert.Nil(t, got)
 			} else if assert.NotNil(t, got) {
 				cert, err := signSSHCertificate(tt.args.key, tt.args.sshOpts, got, signer.Key.(crypto.Signer))
@@ -604,6 +582,41 @@ func TestAzure_AuthorizeSSHSign(t *testing.T) {
 					} else {
 						assert.NoError(t, validateSSHCertificate(cert, tt.expected))
 					}
+				}
+			}
+		})
+	}
+}
+
+func TestAzure_AuthorizeRevoke(t *testing.T) {
+	type test struct {
+		p     *Azure
+		token string
+		code  int
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"not-implemented": func(t *testing.T) test {
+			p, err := generateAzure()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			err := tc.p.AuthorizeRevoke(context.Background(), tc.token)
+			if assert.NotNil(t, err) {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
 				}
 			}
 		})
