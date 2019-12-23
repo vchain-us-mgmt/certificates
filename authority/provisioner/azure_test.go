@@ -15,7 +15,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/errors"
 	"github.com/smallstep/assert"
+	"github.com/smallstep/certificates/errs"
+	"github.com/smallstep/cli/jose"
 )
 
 func TestAzure_Getters(t *testing.T) {
@@ -209,6 +212,145 @@ func TestAzure_Init(t *testing.T) {
 	}
 }
 
+func TestAzure_authorizeToken(t *testing.T) {
+	type test struct {
+		p     *Azure
+		token string
+		err   error
+		code  int
+	}
+	tests := map[string]func(*testing.T) test{
+		"fail/bad-token": func(t *testing.T) test {
+			p, err := generateAzure()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("authorizeToken: error parsing azure token"),
+			}
+		},
+		"fail/cannot-validate-sig": func(t *testing.T) test {
+			p, srv, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			defer srv.Close()
+			jwk, err := jose.GenerateJWK("EC", "P-256", "ES256", "sig", "", 0)
+			assert.FatalError(t, err)
+			tok, err := generateAzureToken("subject", p.oidcConfig.Issuer, azureDefaultAudience,
+				p.TenantID, "subscriptionID", "resourceGroup", "virtualMachine",
+				time.Now(), jwk)
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusUnauthorized,
+				err:   errors.New("authorizeToken: cannot validate azure token"),
+			}
+		},
+		"fail/invalid-token-issuer": func(t *testing.T) test {
+			p, srv, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			defer srv.Close()
+			tok, err := generateAzureToken("subject", "bad-issuer", azureDefaultAudience,
+				p.TenantID, "subscriptionID", "resourceGroup", "virtualMachine",
+				time.Now(), &p.keyStore.keySet.Keys[0])
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusUnauthorized,
+				err:   errors.New("authorizeToken: failed to validate azure token payload"),
+			}
+		},
+		"fail/invalid-tenant-id": func(t *testing.T) test {
+			p, srv, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			defer srv.Close()
+			tok, err := generateAzureToken("subject", p.oidcConfig.Issuer, azureDefaultAudience,
+				"foo", "subscriptionID", "resourceGroup", "virtualMachine",
+				time.Now(), &p.keyStore.keySet.Keys[0])
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusUnauthorized,
+				err:   errors.New("authorizeToken: azure token validation failed - invalid tenant id claim (tid)"),
+			}
+		},
+		"fail/invalid-xms-mir-id": func(t *testing.T) test {
+			p, srv, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			defer srv.Close()
+			jwk := &p.keyStore.keySet.Keys[0]
+			sig, err := jose.NewSigner(
+				jose.SigningKey{Algorithm: jose.ES256, Key: jwk.Key},
+				new(jose.SignerOptions).WithType("JWT").WithHeader("kid", jwk.KeyID),
+			)
+			assert.FatalError(t, err)
+
+			now := time.Now()
+			claims := azurePayload{
+				Claims: jose.Claims{
+					Subject:   "subject",
+					Issuer:    p.oidcConfig.Issuer,
+					IssuedAt:  jose.NewNumericDate(now),
+					NotBefore: jose.NewNumericDate(now),
+					Expiry:    jose.NewNumericDate(now.Add(5 * time.Minute)),
+					Audience:  []string{azureDefaultAudience},
+					ID:        "the-jti",
+				},
+				AppID:            "the-appid",
+				AppIDAcr:         "the-appidacr",
+				IdentityProvider: "the-idp",
+				ObjectID:         "the-oid",
+				TenantID:         p.TenantID,
+				Version:          "the-version",
+				XMSMirID:         "foo",
+			}
+			tok, err := jose.Signed(sig).Claims(claims).CompactSerialize()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+				code:  http.StatusUnauthorized,
+				err:   errors.New("authorizeToken: error parsing xms_mirid claim - foo"),
+			}
+		},
+		"ok": func(t *testing.T) test {
+			p, srv, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			defer srv.Close()
+			tok, err := generateAzureToken("subject", p.oidcConfig.Issuer, azureDefaultAudience,
+				p.TenantID, "subscriptionID", "resourceGroup", "virtualMachine",
+				time.Now(), &p.keyStore.keySet.Keys[0])
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: tok,
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			if claims, name, group, err := tc.p.authorizeToken(tc.token); err != nil {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			} else {
+				if assert.Nil(t, tc.err) {
+					assert.NotNil(t, claims)
+					assert.Equals(t, name, "virtualMachine")
+					assert.Equals(t, group, "resourceGroup")
+				}
+			}
+		})
+	}
+}
+
 func TestAzure_AuthorizeSign(t *testing.T) {
 	p1, srv, err := generateAzureWithServer()
 	assert.FatalError(t, err)
@@ -283,19 +425,20 @@ func TestAzure_AuthorizeSign(t *testing.T) {
 		azure   *Azure
 		args    args
 		wantLen int
+		code    int
 		wantErr bool
 	}{
-		{"ok", p1, args{t1}, 4, false},
-		{"ok", p2, args{t2}, 6, false},
-		{"ok", p1, args{t11}, 4, false},
-		{"fail tenant", p3, args{t3}, 0, true},
-		{"fail resource group", p4, args{t4}, 0, true},
-		{"fail token", p1, args{"token"}, 0, true},
-		{"fail issuer", p1, args{failIssuer}, 0, true},
-		{"fail audience", p1, args{failAudience}, 0, true},
-		{"fail exp", p1, args{failExp}, 0, true},
-		{"fail nbf", p1, args{failNbf}, 0, true},
-		{"fail key", p1, args{failKey}, 0, true},
+		{"ok", p1, args{t1}, 4, http.StatusOK, false},
+		{"ok", p2, args{t2}, 6, http.StatusOK, false},
+		{"ok", p1, args{t11}, 4, http.StatusOK, false},
+		{"fail tenant", p3, args{t3}, 0, http.StatusUnauthorized, true},
+		{"fail resource group", p4, args{t4}, 0, http.StatusUnauthorized, true},
+		{"fail token", p1, args{"token"}, 0, http.StatusUnauthorized, true},
+		{"fail issuer", p1, args{failIssuer}, 0, http.StatusUnauthorized, true},
+		{"fail audience", p1, args{failAudience}, 0, http.StatusUnauthorized, true},
+		{"fail exp", p1, args{failExp}, 0, http.StatusUnauthorized, true},
+		{"fail nbf", p1, args{failNbf}, 0, http.StatusUnauthorized, true},
+		{"fail key", p1, args{failKey}, 0, http.StatusUnauthorized, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -304,8 +447,87 @@ func TestAzure_AuthorizeSign(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Azure.AuthorizeSign() error = %v, wantErr %v", err, tt.wantErr)
 				return
+			} else if err != nil {
+				sc, ok := err.(errs.StatusCoder)
+				assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+				assert.Equals(t, sc.StatusCode(), tt.code)
+			} else {
+				assert.Len(t, tt.wantLen, got)
 			}
-			assert.Len(t, tt.wantLen, got)
+		})
+	}
+}
+
+func TestAzure_AuthorizeRenew(t *testing.T) {
+	p1, err := generateAzure()
+	assert.FatalError(t, err)
+	p2, err := generateAzure()
+	assert.FatalError(t, err)
+
+	// disable renewal
+	disable := true
+	p2.Claims = &Claims{DisableRenewal: &disable}
+	p2.claimer, err = NewClaimer(p2.Claims, globalProvisionerClaims)
+	assert.FatalError(t, err)
+
+	type args struct {
+		cert *x509.Certificate
+	}
+	tests := []struct {
+		name    string
+		azure   *Azure
+		args    args
+		code    int
+		wantErr bool
+	}{
+		{"ok", p1, args{nil}, http.StatusOK, false},
+		{"fail/renew-disabled", p2, args{nil}, http.StatusUnauthorized, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.azure.AuthorizeRenew(context.TODO(), tt.args.cert); (err != nil) != tt.wantErr {
+				t.Errorf("Azure.AuthorizeRenew() error = %v, wantErr %v", err, tt.wantErr)
+			} else if err != nil {
+				fmt.Println("hello")
+				sc, ok := err.(errs.StatusCoder)
+				assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+				assert.Equals(t, sc.StatusCode(), tt.code)
+			}
+		})
+	}
+}
+
+func TestAzure_AuthorizeRevoke(t *testing.T) {
+	type test struct {
+		p     *Azure
+		token string
+		code  int
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"not-implemented": func(t *testing.T) test {
+			p, _, err := generateAzureWithServer()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			err := tc.p.AuthorizeRevoke(context.Background(), tc.token)
+			if assert.NotNil(t, err) {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
+			}
 		})
 	}
 }
@@ -388,63 +610,109 @@ func TestAzure_AuthorizeSSHSign(t *testing.T) {
 	}
 }
 
-func TestAzure_AuthorizeRenew(t *testing.T) {
-	p1, err := generateAzure()
-	assert.FatalError(t, err)
-	p2, err := generateAzure()
-	assert.FatalError(t, err)
-
-	// disable renewal
-	disable := true
-	p2.Claims = &Claims{DisableRenewal: &disable}
-	p2.claimer, err = NewClaimer(p2.Claims, globalProvisionerClaims)
-	assert.FatalError(t, err)
-
-	type args struct {
-		cert *x509.Certificate
+func TestAzure_AuthorizeSSHRevoke(t *testing.T) {
+	type test struct {
+		p     *Azure
+		token string
+		code  int
+		err   error
 	}
-	tests := []struct {
-		name    string
-		azure   *Azure
-		args    args
-		wantErr bool
-	}{
-		{"ok", p1, args{nil}, false},
-		{"fail", p2, args{nil}, true},
+	tests := map[string]func(*testing.T) test{
+		"not-implemented": func(t *testing.T) test {
+			p, err := generateAzure()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+			}
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.azure.AuthorizeRenew(context.TODO(), tt.args.cert); (err != nil) != tt.wantErr {
-				t.Errorf("Azure.AuthorizeRenew() error = %v, wantErr %v", err, tt.wantErr)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			err := tc.p.AuthorizeSSHRevoke(context.Background(), tc.token)
+			if assert.NotNil(t, err) {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+				}
 			}
 		})
 	}
 }
 
-func TestAzure_AuthorizeRevoke(t *testing.T) {
-	az, srv, err := generateAzureWithServer()
-	assert.FatalError(t, err)
-	defer srv.Close()
-
-	token, err := az.GetIdentityToken("subject", "caURL")
-	assert.FatalError(t, err)
-
-	type args struct {
+func TestAzure_AuthorizeSSHRekey(t *testing.T) {
+	type test struct {
+		p     *Azure
 		token string
+		code  int
+		err   error
 	}
-	tests := []struct {
-		name    string
-		azure   *Azure
-		args    args
-		wantErr bool
-	}{
-		{"ok token", az, args{token}, true}, // revoke is disabled
-		{"bad token", az, args{"bad token"}, true},
+	tests := map[string]func(*testing.T) test{
+		"not-implemented": func(t *testing.T) test {
+			p, err := generateAzure()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+			}
+		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := tt.azure.AuthorizeRevoke(context.TODO(), tt.args.token); (err != nil) != tt.wantErr {
-				t.Errorf("Azure.AuthorizeRevoke() error = %v, wantErr %v", err, tt.wantErr)
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			cert, opts, err := tc.p.AuthorizeSSHRekey(context.Background(), tc.token)
+			if assert.NotNil(t, err) {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+					assert.Nil(t, cert)
+					assert.Nil(t, opts)
+				}
+			}
+		})
+	}
+}
+
+func TestAzure_AuthorizeSSHRenew(t *testing.T) {
+	type test struct {
+		p     *Azure
+		token string
+		code  int
+		err   error
+	}
+	tests := map[string]func(*testing.T) test{
+		"not-implemented": func(t *testing.T) test {
+			p, err := generateAzure()
+			assert.FatalError(t, err)
+			return test{
+				p:     p,
+				token: "foo",
+				code:  http.StatusUnauthorized,
+				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+			}
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			tc := tt(t)
+			cert, err := tc.p.AuthorizeSSHRenew(context.Background(), tc.token)
+			if assert.NotNil(t, err) {
+				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+					assert.Nil(t, cert)
+				}
 			}
 		})
 	}
