@@ -282,10 +282,10 @@ func (v *validityValidator) Valid(crt *x509.Certificate) error {
 	}
 
 	if na.Before(now) {
-		return errors.Errorf("NotAfter: %v cannot be in the past", na)
+		return errors.Errorf("notAfter cannot be in the past; na=%v", na)
 	}
 	if na.Before(nb) {
-		return errors.Errorf("NotAfter: %v cannot be before NotBefore: %v", na, nb)
+		return errors.Errorf("notAfter cannot be before notBefore; na=%v, nb=%v", na, nb)
 	}
 	if d < v.min {
 		return errors.Errorf("requested duration of %v is less than the authorized minimum certificate duration of %v",

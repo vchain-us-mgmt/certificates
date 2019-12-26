@@ -655,6 +655,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 		},
 		"ok": func(t *testing.T) test {
 			cert, jwk, err := createSSHCert(&ssh.Certificate{Serial: 123455, CertType: ssh.HostCert}, sshHostSigner)
+
 			assert.FatalError(t, err)
 			tok, err := generateToken("123455", "sshpop-provisioner", testAudiences.SSHRekey[0], "",
 				[]string{"test.smallstep.com"}, time.Now(), jwk, withSSHPOPFile(cert))
