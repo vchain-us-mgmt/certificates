@@ -772,17 +772,17 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 								tc.claims.Step.SSH.ValidAfter.t = time.Time{}
 								tc.claims.Step.SSH.ValidBefore.t = time.Time{}
 								assert.Equals(t, SSHOptions(v), *tc.claims.Step.SSH)
-							case sshCertificateKeyIDModifier:
+							case sshCertKeyIDModifier:
 								assert.Equals(t, string(v), "foo")
 							case sshCertTypeModifier:
 								assert.Equals(t, string(v), tc.claims.Step.SSH.CertType)
 							case sshCertPrincipalsModifier:
 								assert.Equals(t, []string(v), tc.claims.Step.SSH.Principals)
-							case sshCertificateValidAfterModifier:
+							case sshCertValidAfterModifier:
 								assert.Equals(t, int64(v), tc.claims.Step.SSH.ValidAfter.RelativeTime(nw).Unix())
-							case sshCertificateValidBeforeModifier:
+							case sshCertValidBeforeModifier:
 								assert.Equals(t, int64(v), tc.claims.Step.SSH.ValidBefore.RelativeTime(nw).Unix())
-							case sshCertificateDefaultsModifier:
+							case sshCertDefaultsModifier:
 								assert.Equals(t, SSHOptions(v), SSHOptions{CertType: SSHUserCert})
 							case *sshLimitDuration:
 								assert.Equals(t, v.Claimer, tc.p.claimer)

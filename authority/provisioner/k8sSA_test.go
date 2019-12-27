@@ -360,7 +360,7 @@ func TestK8sSA_AuthorizeSSHSign(t *testing.T) {
 						tot := 0
 						for _, o := range opts {
 							switch v := o.(type) {
-							case sshCertificateDefaultsModifier:
+							case sshCertDefaultsModifier:
 								assert.Equals(t, v.CertType, SSHUserCert)
 							case *sshDefaultExtensionModifier:
 							case *sshValidityModifier:

@@ -334,7 +334,7 @@ func (o *OIDC) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption
 	}
 	signOptions := []SignOption{
 		// set the key id to the token email
-		sshCertificateKeyIDModifier(claims.Email),
+		sshCertKeyIDModifier(claims.Email),
 	}
 
 	// Get the identity using either the default identityFunc or one injected
@@ -357,7 +357,7 @@ func (o *OIDC) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption
 
 	// Default to a user certificate with usernames as principals if those options
 	// are not set.
-	signOptions = append(signOptions, sshCertificateDefaultsModifier(defaults))
+	signOptions = append(signOptions, sshCertDefaultsModifier(defaults))
 
 	return append(signOptions,
 		// Set the default extensions

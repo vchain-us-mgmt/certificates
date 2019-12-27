@@ -450,7 +450,7 @@ func (p *AWS) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption,
 
 	signOptions := []SignOption{
 		// set the key id to the token subject
-		sshCertificateKeyIDModifier(claims.Subject),
+		sshCertKeyIDModifier(claims.Subject),
 	}
 
 	// Default to host + known IPs/hostnames
@@ -464,7 +464,7 @@ func (p *AWS) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption,
 	// Validate user options
 	signOptions = append(signOptions, sshCertificateOptionsValidator(defaults))
 	// Set defaults if not given as user options
-	signOptions = append(signOptions, sshCertificateDefaultsModifier(defaults))
+	signOptions = append(signOptions, sshCertDefaultsModifier(defaults))
 
 	return append(signOptions,
 		// Set the default extensions.
