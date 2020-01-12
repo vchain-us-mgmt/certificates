@@ -33,11 +33,24 @@ func WithMessage(format string, args ...interface{}) Option {
 	}
 }
 
+// WithCtxKeyVal returns an Option that adds the given key-value pair to the
+// Error details. This is helpful for debugging errors.
+func WithCtxKeyVal(key string, val interface{}) Option {
+	return func(e *Error) error {
+		if e.Details == nil {
+			e.Details = make(map[string]interface{})
+		}
+		e.Details[key] = val
+		return e
+	}
+}
+
 // Error represents the CA API errors.
 type Error struct {
-	Status int
-	Err    error
-	Msg    string
+	Status  int
+	Err     error
+	Msg     string
+	Details map[string]interface{}
 }
 
 // New returns a new Error. If the given error implements the StatusCoder

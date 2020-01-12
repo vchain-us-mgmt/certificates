@@ -28,6 +28,7 @@ import (
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/authority"
 	"github.com/smallstep/certificates/authority/provisioner"
+	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/certificates/logging"
 	"github.com/smallstep/certificates/sshutil"
 	"github.com/smallstep/certificates/templates"
@@ -1009,8 +1010,12 @@ func Test_caHandler_Provisioners(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedError400 := []byte(`{"status":400,"message":"Bad Request"}`)
-	expectedError500 := []byte(`{"status":500,"message":"Internal Server Error"}`)
+	expectedError400 := errs.BadRequest(errors.New("force"))
+	expectedError400Bytes, err := json.Marshal(expectedError400)
+	assert.FatalError(t, err)
+	expectedError500 := errs.InternalServerError(errors.New("force"))
+	expectedError500Bytes, err := json.Marshal(expectedError500)
+	assert.FatalError(t, err)
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			h := &caHandler{
@@ -1035,12 +1040,12 @@ func Test_caHandler_Provisioners(t *testing.T) {
 			} else {
 				switch tt.statusCode {
 				case 400:
-					if !bytes.Equal(bytes.TrimSpace(body), expectedError400) {
-						t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError400)
+					if !bytes.Equal(bytes.TrimSpace(body), expectedError400Bytes) {
+						t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError400Bytes)
 					}
 				case 500:
-					if !bytes.Equal(bytes.TrimSpace(body), expectedError500) {
-						t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError500)
+					if !bytes.Equal(bytes.TrimSpace(body), expectedError500Bytes) {
+						t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError500Bytes)
 					}
 				default:
 					t.Errorf("caHandler.Provisioner unexpected status code = %d", tt.statusCode)
@@ -1077,7 +1082,9 @@ func Test_caHandler_ProvisionerKey(t *testing.T) {
 	}
 
 	expected := []byte(`{"key":"` + privKey + `"}`)
-	expectedError := []byte(`{"status":404,"message":"Not Found"}`)
+	expectedError404 := errs.NotFound(errors.New("force"))
+	expectedError404Bytes, err := json.Marshal(expectedError404)
+	assert.FatalError(t, err)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1101,8 +1108,8 @@ func Test_caHandler_ProvisionerKey(t *testing.T) {
 					t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expected)
 				}
 			} else {
-				if !bytes.Equal(bytes.TrimSpace(body), expectedError) {
-					t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError)
+				if !bytes.Equal(bytes.TrimSpace(body), expectedError404Bytes) {
+					t.Errorf("caHandler.Provisioners Body = %s, wants %s", body, expectedError404Bytes)
 				}
 			}
 		})

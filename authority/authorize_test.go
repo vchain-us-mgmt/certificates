@@ -11,6 +11,7 @@ import (
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/db"
+	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/cli/crypto/pemutil"
 	"github.com/smallstep/cli/crypto/randutil"
 	"github.com/smallstep/cli/jose"
@@ -67,15 +68,16 @@ func TestAuthority_authorizeToken(t *testing.T) {
 	type authorizeTest struct {
 		auth *Authority
 		ott  string
-		err  *apiError
+		err  error
+		code int
 	}
 	tests := map[string]func(t *testing.T) *authorizeTest{
 		"fail/invalid-ott": func(t *testing.T) *authorizeTest {
 			return &authorizeTest{
 				auth: a,
 				ott:  "foo",
-				err: &apiError{errors.New("authorizeToken: error parsing token"),
-					http.StatusUnauthorized, apiCtx{"ott": "foo"}},
+				err:  errors.New("authorizeToken: error parsing token"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"fail/prehistoric-token": func(t *testing.T) *authorizeTest {
@@ -93,8 +95,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			return &authorizeTest{
 				auth: a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeToken: token issued before the bootstrap of certificate authority"),
-					http.StatusUnauthorized, apiCtx{"ott": raw}},
+				err:  errors.New("authorizeToken: token issued before the bootstrap of certificate authority"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"fail/provisioner-not-found": func(t *testing.T) *authorizeTest {
@@ -115,8 +117,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			return &authorizeTest{
 				auth: a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeToken: provisioner not found or invalid audience (https://test.ca.smallstep.com/revoke)"),
-					http.StatusUnauthorized, apiCtx{"ott": raw}},
+				err:  errors.New("authorizeToken: provisioner not found or invalid audience (https://test.ca.smallstep.com/revoke)"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"ok/simpledb": func(t *testing.T) *authorizeTest {
@@ -152,8 +154,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			return &authorizeTest{
 				auth: _a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeToken: token already used"),
-					http.StatusUnauthorized, apiCtx{"ott": raw}},
+				err:  errors.New("authorizeToken: token already used"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"ok/mockNoSQLDB": func(t *testing.T) *authorizeTest {
@@ -200,8 +202,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			return &authorizeTest{
 				auth: _a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeToken: failed when checking if token already used: force"),
-					http.StatusInternalServerError, apiCtx{"ott": raw}},
+				err:  errors.New("authorizeToken: failed when attempting to store token: force"),
+				code: http.StatusInternalServerError,
 			}
 		},
 		"fail/mockNoSQLDB/token-already-used": func(t *testing.T) *authorizeTest {
@@ -225,8 +227,8 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			return &authorizeTest{
 				auth: _a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeToken: token already used"),
-					http.StatusUnauthorized, apiCtx{"ott": raw}},
+				err:  errors.New("authorizeToken: token already used"),
+				code: http.StatusUnauthorized,
 			}
 		},
 	}
@@ -238,14 +240,14 @@ func TestAuthority_authorizeToken(t *testing.T) {
 			p, err := tc.auth.authorizeToken(context.TODO(), tc.ott)
 			if err != nil {
 				if assert.NotNil(t, tc.err) {
-					switch v := err.(type) {
-					case *apiError:
-						assert.HasPrefix(t, v.err.Error(), tc.err.Error())
-						assert.Equals(t, v.code, tc.err.code)
-						assert.Equals(t, v.context, tc.err.context)
-					default:
-						t.Errorf("unexpected error type: %T", v)
-					}
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+
+					ctxErr, ok := err.(*errs.Error)
+					assert.Fatal(t, ok, "error is not of type *errs.Error")
+					assert.Equals(t, ctxErr.Details["ott"], tc.ott)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -274,15 +276,16 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 	type authorizeTest struct {
 		auth  *Authority
 		token string
-		opts  *RevokeOptions
 		err   error
+		code  int
 	}
 	tests := map[string]func(t *testing.T) *authorizeTest{
 		"fail/token/invalid-ott": func(t *testing.T) *authorizeTest {
 			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{OTT: "foo"},
-				err:  errors.New("authorizeRevoke: authorizeToken: error parsing token"),
+				auth:  a,
+				token: "foo",
+				err:   errors.New("authority.authorizeRevoke: authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
 			}
 		},
 		"fail/token/invalid-subject": func(t *testing.T) *authorizeTest {
@@ -297,9 +300,10 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 			raw, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
 			assert.FatalError(t, err)
 			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{OTT: raw},
-				err:  errors.New("authorizeRevoke: token subject cannot be empty"),
+				auth:  a,
+				token: raw,
+				err:   errors.New("authority.authorizeRevoke: authorizeRevoke: authorizeToken: jwk token subject cannot be empty"),
+				code:  http.StatusUnauthorized,
 			}
 		},
 		"ok/token": func(t *testing.T) *authorizeTest {
@@ -314,34 +318,8 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 			raw, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
 			assert.FatalError(t, err)
 			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{OTT: raw},
-			}
-		},
-		"fail/mTLS/invalid-serial": func(t *testing.T) *authorizeTest {
-			crt, err := pemutil.ReadCertificate("./testdata/certs/foo.crt")
-			assert.FatalError(t, err)
-			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{MTLS: true, Crt: crt, Serial: "foo"},
-				err:  errors.New("authorizeRevoke: serial number in certificate different than body"),
-			}
-		},
-		"fail/mTLS/load-provisioner": func(t *testing.T) *authorizeTest {
-			crt, err := pemutil.ReadCertificate("./testdata/certs/provisioner-not-found.crt")
-			assert.FatalError(t, err)
-			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{MTLS: true, Crt: crt, Serial: "41633491264736369593451462439668497527"},
-				err:  errors.New("authorizeRevoke: provisioner not found"),
-			}
-		},
-		"ok/mTLS": func(t *testing.T) *authorizeTest {
-			crt, err := pemutil.ReadCertificate("./testdata/certs/foo.crt")
-			assert.FatalError(t, err)
-			return &authorizeTest{
-				auth: a,
-				opts: &RevokeOptions{MTLS: true, Crt: crt, Serial: "102012593071130646873265215610956555026"},
+				auth:  a,
+				token: raw,
 			}
 		},
 	}
@@ -352,7 +330,14 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 
 			if err := tc.auth.authorizeRevoke(context.TODO(), tc.token); err != nil {
 				if assert.NotNil(t, tc.err) {
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
+
+					ctxErr, ok := err.(*errs.Error)
+					assert.Fatal(t, ok, "error is not of type *errs.Error")
+					assert.Equals(t, ctxErr.Details["ott"], tc.token)
 				}
 			} else {
 				assert.Nil(t, tc.err)
@@ -361,7 +346,7 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 	}
 }
 
-func TestAuthority_AuthorizeSign(t *testing.T) {
+func TestAuthority_authorizeSign(t *testing.T) {
 	a := testAuthority(t)
 
 	jwk, err := jose.ParseKey("testdata/secrets/step_cli_key_priv.jwk", jose.WithPassword([]byte("pass")))
@@ -379,15 +364,16 @@ func TestAuthority_AuthorizeSign(t *testing.T) {
 	type authorizeTest struct {
 		auth *Authority
 		ott  string
-		err  *apiError
+		err  error
+		code int
 	}
 	tests := map[string]func(t *testing.T) *authorizeTest{
 		"fail/invalid-ott": func(t *testing.T) *authorizeTest {
 			return &authorizeTest{
 				auth: a,
 				ott:  "foo",
-				err: &apiError{errors.New("authorizeSign: authorizeToken: error parsing token"),
-					http.StatusUnauthorized, apiCtx{"ott": "foo"}},
+				err:  errors.New("authority.authorizeSign: authorizeToken: error parsing token"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"fail/invalid-subject": func(t *testing.T) *authorizeTest {
@@ -404,8 +390,8 @@ func TestAuthority_AuthorizeSign(t *testing.T) {
 			return &authorizeTest{
 				auth: a,
 				ott:  raw,
-				err: &apiError{errors.New("authorizeSign: token subject cannot be empty"),
-					http.StatusUnauthorized, apiCtx{"ott": raw}},
+				err:  errors.New("authority.authorizeSign: authorizeSign: authorizeToken: jwk token subject cannot be empty"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"ok": func(t *testing.T) *authorizeTest {
@@ -433,15 +419,14 @@ func TestAuthority_AuthorizeSign(t *testing.T) {
 			got, err := tc.auth.AuthorizeSign(tc.ott)
 			if err != nil {
 				if assert.NotNil(t, tc.err) {
-					assert.Nil(t, got)
-					switch v := err.(type) {
-					case *apiError:
-						assert.HasPrefix(t, v.err.Error(), tc.err.Error())
-						assert.Equals(t, v.code, tc.err.code)
-						assert.Equals(t, v.context, tc.err.context)
-					default:
-						t.Errorf("unexpected error type: %T", v)
-					}
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+
+					ctxErr, ok := err.(*errs.Error)
+					assert.Fatal(t, ok, "error is not of type *errs.Error")
+					assert.Equals(t, ctxErr.Details["ott"], tc.ott)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -452,7 +437,6 @@ func TestAuthority_AuthorizeSign(t *testing.T) {
 	}
 }
 
-// TODO: remove once Authorize deprecated.
 func TestAuthority_Authorize(t *testing.T) {
 	a := testAuthority(t)
 
@@ -544,7 +528,7 @@ func TestAuthority_Authorize(t *testing.T) {
 	}
 }
 
-func TestAuthority_authorizeRenewal(t *testing.T) {
+func TestAuthority_authorizeRenew(t *testing.T) {
 	fooCrt, err := pemutil.ReadCertificate("testdata/certs/foo.crt")
 	assert.FatalError(t, err)
 
@@ -556,8 +540,9 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 
 	type authorizeTest struct {
 		auth *Authority
-		crt  *x509.Certificate
-		err  *apiError
+		cert *x509.Certificate
+		err  error
+		code int
 	}
 	tests := map[string]func(t *testing.T) *authorizeTest{
 		"fail/db.IsRevoked-error": func(t *testing.T) *authorizeTest {
@@ -570,9 +555,9 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 
 			return &authorizeTest{
 				auth: a,
-				crt:  fooCrt,
-				err: &apiError{errors.New("renew: force"),
-					http.StatusInternalServerError, apiCtx{"serialNumber": "102012593071130646873265215610956555026"}},
+				cert: fooCrt,
+				err:  errors.New("authority.authorizeRenew: force"),
+				code: http.StatusInternalServerError,
 			}
 		},
 		"fail/revoked": func(t *testing.T) *authorizeTest {
@@ -584,9 +569,9 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 			}
 			return &authorizeTest{
 				auth: a,
-				crt:  fooCrt,
-				err: &apiError{errors.New("renew: certificate has been revoked"),
-					http.StatusUnauthorized, apiCtx{"serialNumber": "102012593071130646873265215610956555026"}},
+				cert: fooCrt,
+				err:  errors.New("authority.authorizeRenew: certificate has been revoked"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"fail/load-provisioner": func(t *testing.T) *authorizeTest {
@@ -598,9 +583,9 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 			}
 			return &authorizeTest{
 				auth: a,
-				crt:  otherCrt,
-				err: &apiError{errors.New("renew: provisioner not found"),
-					http.StatusUnauthorized, apiCtx{"serialNumber": "41633491264736369593451462439668497527"}},
+				cert: otherCrt,
+				err:  errors.New("authority.authorizeRenew: provisioner not found"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"fail/provisioner-authorize-renewal-fail": func(t *testing.T) *authorizeTest {
@@ -613,9 +598,9 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 
 			return &authorizeTest{
 				auth: a,
-				crt:  renewDisabledCrt,
-				err: &apiError{errors.New("renew: renew is disabled for provisioner renew_disabled:IMi94WBNI6gP5cNHXlZYNUzvMjGdHyBRmFoo-lCEaqk"),
-					http.StatusUnauthorized, apiCtx{"serialNumber": "119772236532068856521070735128919532568"}},
+				cert: renewDisabledCrt,
+				err:  errors.New("authority.authorizeRenew: authorizeRenew: renew is disabled for jwk provisioner renew_disabled:IMi94WBNI6gP5cNHXlZYNUzvMjGdHyBRmFoo-lCEaqk"),
+				code: http.StatusUnauthorized,
 			}
 		},
 		"ok": func(t *testing.T) *authorizeTest {
@@ -627,7 +612,7 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 			}
 			return &authorizeTest{
 				auth: a,
-				crt:  fooCrt,
+				cert: fooCrt,
 			}
 		},
 	}
@@ -636,17 +621,17 @@ func TestAuthority_authorizeRenewal(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			tc := genTestCase(t)
 
-			err := tc.auth.authorizeRenew(tc.crt)
+			err := tc.auth.authorizeRenew(tc.cert)
 			if err != nil {
 				if assert.NotNil(t, tc.err) {
-					switch v := err.(type) {
-					case *apiError:
-						assert.HasPrefix(t, v.err.Error(), tc.err.Error())
-						assert.Equals(t, v.code, tc.err.code)
-						assert.Equals(t, v.context, tc.err.context)
-					default:
-						t.Errorf("unexpected error type: %T", v)
-					}
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+
+					ctxErr, ok := err.(*errs.Error)
+					assert.Fatal(t, ok, "error is not of type *errs.Error")
+					assert.Equals(t, ctxErr.Details["serialNumber"], tc.cert.SerialNumber.String())
 				}
 			} else {
 				assert.Nil(t, tc.err)
