@@ -16,8 +16,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/smallstep/certificates/errs"
-
 	"github.com/smallstep/assert"
 	"github.com/smallstep/certificates/api"
 	"github.com/smallstep/certificates/authority"

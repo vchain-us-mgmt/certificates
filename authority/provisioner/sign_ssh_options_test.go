@@ -12,7 +12,6 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-<<<<<<< HEAD
 func TestSSHOptions_Type(t *testing.T) {
 	type fields struct {
 		CertType string
@@ -34,7 +33,11 @@ func TestSSHOptions_Type(t *testing.T) {
 			}
 			if got := o.Type(); got != tt.want {
 				t.Errorf("SSHOptions.Type() = %v, want %v", got, tt.want)
-=======
+			}
+		})
+	}
+}
+
 func TestSSHOptions_Modify(t *testing.T) {
 	type test struct {
 		so    *SSHOptions
@@ -481,7 +484,6 @@ func Test_sshDefaultExtensionModifier_Modify(t *testing.T) {
 				if assert.Nil(t, tc.err) {
 					tc.valid(tc.cert)
 				}
->>>>>>> wip
 			}
 		})
 	}

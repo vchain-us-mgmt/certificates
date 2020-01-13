@@ -217,7 +217,7 @@ func (p *Azure) authorizeToken(token string) (*azurePayload, string, string, err
 		return nil, "", "", errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: error parsing azure token")
 	}
 	if len(jwt.Headers) == 0 {
-		return nil, "", "", errs.InternalServerError(errors.New("authorizeToken: azure token missing header"))
+		return nil, "", "", errs.Unauthorized(errors.New("authorizeToken: azure token missing header"))
 	}
 
 	var found bool

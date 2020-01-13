@@ -10,6 +10,7 @@ import (
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/cli/jose"
+	"golang.org/x/crypto/ssh"
 )
 
 // Claims extends jose.Claims with step attributes.
@@ -37,21 +38,21 @@ func SkipTokenReuseFromContext(ctx context.Context) bool {
 // authorizeToken parses the token and returns the provisioner used to generate
 // the token. This method enforces the One-Time use policy (tokens can only be
 // used once).
-func (a *Authority) authorizeToken(ctx context.Context, ott string) (provisioner.Interface, error) {
-	var opts = []errs.Option{errs.WithCtxKeyVal("ott", ott)}
+func (a *Authority) authorizeToken(ctx context.Context, token string) (provisioner.Interface, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
 
 	// Validate payload
-	token, err := jose.ParseSigned(ott)
+	tok, err := jose.ParseSigned(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: error parsing token", opts...)
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.authorizeToken: error parsing token", opts...)
 	}
 
 	// Get claims w/out verification. We need to look up the provisioner
 	// key in order to verify the claims and we need the issuer from the claims
 	// before we can look up the provisioner.
 	var claims Claims
-	if err = token.UnsafeClaimsWithoutVerification(&claims); err != nil {
-		return nil, errs.Wrap(http.StatusUnauthorized, err, "authorizeToken", opts...)
+	if err = tok.UnsafeClaimsWithoutVerification(&claims); err != nil {
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.authorizeToken", opts...)
 	}
 
 	// TODO: use new persistence layer abstraction.
@@ -59,27 +60,27 @@ func (a *Authority) authorizeToken(ctx context.Context, ott string) (provisioner
 	// This check is meant as a stopgap solution to the current lack of a persistence layer.
 	if a.config.AuthorityConfig != nil && !a.config.AuthorityConfig.DisableIssuedAtCheck {
 		if claims.IssuedAt != nil && claims.IssuedAt.Time().Before(a.startTime) {
-			return nil, errs.Unauthorized(errors.New("authorizeToken: token issued before the bootstrap of certificate authority"), opts...)
+			return nil, errs.Unauthorized(errors.New("authority.authorizeToken: token issued before the bootstrap of certificate authority"), opts...)
 		}
 	}
 
 	// This method will also validate the audiences for JWK provisioners.
-	p, ok := a.provisioners.LoadByToken(token, &claims.Claims)
+	p, ok := a.provisioners.LoadByToken(tok, &claims.Claims)
 	if !ok {
-		return nil, errs.Unauthorized(errors.Errorf("authorizeToken: provisioner "+
+		return nil, errs.Unauthorized(errors.Errorf("authority.authorizeToken: provisioner "+
 			"not found or invalid audience (%s)", strings.Join(claims.Audience, ", ")), opts...)
 	}
 
 	// Store the token to protect against reuse unless it's skipped.
 	if !SkipTokenReuseFromContext(ctx) {
-		if reuseKey, err := p.GetTokenID(ott); err == nil {
-			ok, err := a.db.UseToken(reuseKey, ott)
+		if reuseKey, err := p.GetTokenID(token); err == nil {
+			ok, err := a.db.UseToken(reuseKey, token)
 			if err != nil {
 				return nil, errs.Wrap(http.StatusInternalServerError, err,
-					"authorizeToken: failed when attempting to store token", opts...)
+					"authority.authorizeToken: failed when attempting to store token", opts...)
 			}
 			if !ok {
-				return nil, errs.Unauthorized(errors.Errorf("authorizeToken: token already used"), opts...)
+				return nil, errs.Unauthorized(errors.Errorf("authority.authorizeToken: token already used"), opts...)
 			}
 		}
 	}
@@ -89,34 +90,34 @@ func (a *Authority) authorizeToken(ctx context.Context, ott string) (provisioner
 
 // Authorize grabs the method from the context and authorizes a signature
 // request by validating the one-time-token.
-func (a *Authority) Authorize(ctx context.Context, ott string) ([]provisioner.SignOption, error) {
-	var opts = []errs.Option{errs.WithCtxKeyVal("ott", ott)}
+func (a *Authority) Authorize(ctx context.Context, token string) ([]provisioner.SignOption, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
 
 	switch m := provisioner.MethodFromContext(ctx); m {
 	case provisioner.SignMethod:
-		return a.authorizeSign(ctx, ott)
+		return a.authorizeSign(ctx, token)
 	case provisioner.RevokeMethod:
-		return nil, a.authorizeRevoke(ctx, ott)
+		return nil, a.authorizeRevoke(ctx, token)
 	case provisioner.SignSSHMethod:
 		if a.sshCAHostCertSignKey == nil && a.sshCAUserCertSignKey == nil {
 			return nil, errs.NotImplemented(errors.New("authorize: ssh certificate flows are not enabled"), opts...)
 		}
-		return a.authorizeSSHSign(ctx, ott)
+		return a.authorizeSSHSign(ctx, token)
 	case provisioner.RenewSSHMethod:
 		if a.sshCAHostCertSignKey == nil && a.sshCAUserCertSignKey == nil {
 			return nil, errs.NotImplemented(errors.New("authorize: ssh certificates flows are not enabled"), opts...)
 		}
-		if _, err := a.authorizeSSHRenew(ctx, ott); err != nil {
+		if _, err := a.authorizeSSHRenew(ctx, token); err != nil {
 			return nil, err
 		}
 		return nil, nil
 	case provisioner.RevokeSSHMethod:
-		return nil, a.authorizeSSHRevoke(ctx, ott)
+		return nil, a.authorizeSSHRevoke(ctx, token)
 	case provisioner.RekeySSHMethod:
 		if a.sshCAHostCertSignKey == nil && a.sshCAUserCertSignKey == nil {
 			return nil, errs.NotImplemented(errors.New("authorize: ssh certificates flows are not enabled"), opts...)
 		}
-		_, opts, err := a.authorizeSSHRekey(ctx, ott)
+		_, opts, err := a.authorizeSSHRekey(ctx, token)
 		if err != nil {
 			return nil, err
 		}
@@ -128,14 +129,14 @@ func (a *Authority) Authorize(ctx context.Context, ott string) ([]provisioner.Si
 
 // authorizeSign loads the provisioner from the token and calls the provisioner
 // AuthorizeSign method. Returns a list of methods to apply to the signing flow.
-func (a *Authority) authorizeSign(ctx context.Context, ott string) ([]provisioner.SignOption, error) {
-	var opts = []errs.Option{errs.WithCtxKeyVal("ott", ott)}
+func (a *Authority) authorizeSign(ctx context.Context, token string) ([]provisioner.SignOption, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
 
-	p, err := a.authorizeToken(ctx, ott)
+	p, err := a.authorizeToken(ctx, token)
 	if err != nil {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSign", opts...)
 	}
-	signOpts, err := p.AuthorizeSign(ctx, ott)
+	signOpts, err := p.AuthorizeSign(ctx, token)
 	if err != nil {
 		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSign", opts...)
 	}
@@ -143,25 +144,25 @@ func (a *Authority) authorizeSign(ctx context.Context, ott string) ([]provisione
 }
 
 // AuthorizeSign authorizes a signature request by validating and authenticating
-// a OTT that must be sent w/ the request.
+// a token that must be sent w/ the request.
 //
 // NOTE: This method is deprecated and should not be used. We make it available
 // in the short term os as not to break existing clients.
-func (a *Authority) AuthorizeSign(ott string) ([]provisioner.SignOption, error) {
+func (a *Authority) AuthorizeSign(token string) ([]provisioner.SignOption, error) {
 	ctx := provisioner.NewContextWithMethod(context.Background(), provisioner.SignMethod)
-	return a.Authorize(ctx, ott)
+	return a.Authorize(ctx, token)
 }
 
 // authorizeRevoke locates the provisioner used to generate the authenticating
 // token and then performs the token validation flow.
-func (a *Authority) authorizeRevoke(ctx context.Context, ott string) error {
-	var opts = []errs.Option{errs.WithCtxKeyVal("ott", ott)}
+func (a *Authority) authorizeRevoke(ctx context.Context, token string) error {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
 
-	p, err := a.authorizeToken(ctx, ott)
+	p, err := a.authorizeToken(ctx, token)
 	if err != nil {
 		return errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeRevoke", opts...)
 	}
-	if err = p.AuthorizeRevoke(ctx, ott); err != nil {
+	if err = p.AuthorizeRevoke(ctx, token); err != nil {
 		return errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeRevoke", opts...)
 	}
 	return nil
@@ -173,7 +174,7 @@ func (a *Authority) authorizeRevoke(ctx context.Context, ott string) error {
 //
 // TODO(mariano): should we authorize by default?
 func (a *Authority) authorizeRenew(cert *x509.Certificate) error {
-	var opts = []errs.Option{errs.WithCtxKeyVal("serialNumber", cert.SerialNumber.String())}
+	var opts = []errs.Option{errs.WithKeyVal("serialNumber", cert.SerialNumber.String())}
 
 	// Check the passive revocation table.
 	isRevoked, err := a.db.IsRevoked(cert.SerialNumber.String())
@@ -190,6 +191,70 @@ func (a *Authority) authorizeRenew(cert *x509.Certificate) error {
 	}
 	if err := p.AuthorizeRenew(context.Background(), cert); err != nil {
 		return errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeRenew", opts...)
+	}
+	return nil
+}
+
+// authorizeSSHSign loads the provisioner from the token, checks that it has not
+// been used again and calls the provisioner AuthorizeSSHSign method. Returns a
+// list of methods to apply to the signing flow.
+func (a *Authority) authorizeSSHSign(ctx context.Context, token string) ([]provisioner.SignOption, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
+
+	p, err := a.authorizeToken(ctx, token)
+	if err != nil {
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.authorizeSSHSign", opts...)
+	}
+	signOpts, err := p.AuthorizeSSHSign(ctx, token)
+	if err != nil {
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.authorizeSSHSign", opts...)
+	}
+	return signOpts, nil
+}
+
+// authorizeSSHRenew authorizes an SSH certificate renewal request, by
+// validating the contents of an SSHPOP token.
+func (a *Authority) authorizeSSHRenew(ctx context.Context, token string) (*ssh.Certificate, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
+
+	p, err := a.authorizeToken(ctx, token)
+	if err != nil {
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRenew", opts...)
+	}
+	cert, err := p.AuthorizeSSHRenew(ctx, token)
+	if err != nil {
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRenew", opts...)
+	}
+	return cert, nil
+}
+
+// authorizeSSHRekey authorizes an SSH certificate rekey request, by
+// validating the contents of an SSHPOP token.
+func (a *Authority) authorizeSSHRekey(ctx context.Context, token string) (*ssh.Certificate, []provisioner.SignOption, error) {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
+
+	p, err := a.authorizeToken(ctx, token)
+	if err != nil {
+		return nil, nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRekey", opts...)
+	}
+	cert, signOpts, err := p.AuthorizeSSHRekey(ctx, token)
+	if err != nil {
+		return nil, nil, errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRekey", opts...)
+	}
+	return cert, signOpts, nil
+}
+
+// authorizeSSHRevoke authorizes an SSH certificate revoke request, by
+// validating the contents of an SSHPOP token.
+func (a *Authority) authorizeSSHRevoke(ctx context.Context, token string) error {
+	var opts = []errs.Option{errs.WithKeyVal("token", token)}
+
+	p, err := a.authorizeToken(ctx, token)
+	if err != nil {
+		return errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRevoke", opts...)
+	}
+	if err = p.AuthorizeSSHRevoke(ctx, token); err != nil {
+		return errs.Wrap(http.StatusInternalServerError, err, "authority.authorizeSSHRevoke", opts...)
 	}
 	return nil
 }

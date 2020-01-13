@@ -33,9 +33,9 @@ func WithMessage(format string, args ...interface{}) Option {
 	}
 }
 
-// WithCtxKeyVal returns an Option that adds the given key-value pair to the
+// WithKeyVal returns an Option that adds the given key-value pair to the
 // Error details. This is helpful for debugging errors.
-func WithCtxKeyVal(key string, val interface{}) Option {
+func WithKeyVal(key string, val interface{}) Option {
 	return func(e *Error) error {
 		if e.Details == nil {
 			e.Details = make(map[string]interface{})

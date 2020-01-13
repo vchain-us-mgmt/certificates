@@ -188,22 +188,6 @@ func (a *Authority) GetSSHBastion(user string, hostname string) (*Bastion, error
 	}
 }
 
-// authorizeSSHSign loads the provisioner from the token, checks that it has not
-// been used again and calls the provisioner AuthorizeSSHSign method. Returns a
-// list of methods to apply to the signing flow.
-func (a *Authority) authorizeSSHSign(ctx context.Context, ott string) ([]provisioner.SignOption, error) {
-	var errContext = apiCtx{"ott": ott}
-	p, err := a.authorizeToken(ctx, ott)
-	if err != nil {
-		return nil, &apiError{errors.Wrap(err, "authorizeSSHSign"), http.StatusUnauthorized, errContext}
-	}
-	opts, err := p.AuthorizeSSHSign(ctx, ott)
-	if err != nil {
-		return nil, &apiError{errors.Wrap(err, "authorizeSSHSign"), http.StatusUnauthorized, errContext}
-	}
-	return opts, nil
-}
-
 // SignSSH creates a signed SSH certificate with the given public key and options.
 func (a *Authority) SignSSH(key ssh.PublicKey, opts provisioner.SSHOptions, signOpts ...provisioner.SignOption) (*ssh.Certificate, error) {
 	var mods []provisioner.SSHCertificateModifier
@@ -326,30 +310,6 @@ func (a *Authority) SignSSH(key ssh.PublicKey, opts provisioner.SSHOptions, sign
 	return cert, nil
 }
 
-// authorizeSSHRenew authorizes an SSH certificate renewal request, by
-// validating the contents of an SSHPOP token.
-func (a *Authority) authorizeSSHRenew(ctx context.Context, token string) (*ssh.Certificate, error) {
-	errContext := map[string]interface{}{"ott": token}
-
-	p, err := a.authorizeToken(ctx, token)
-	if err != nil {
-		return nil, &apiError{
-			err:     errors.Wrap(err, "authorizeSSHRenew"),
-			code:    http.StatusUnauthorized,
-			context: errContext,
-		}
-	}
-	cert, err := p.AuthorizeSSHRenew(ctx, token)
-	if err != nil {
-		return nil, &apiError{
-			err:     errors.Wrap(err, "authorizeSSHRenew"),
-			code:    http.StatusUnauthorized,
-			context: errContext,
-		}
-	}
-	return cert, nil
-}
-
 // RenewSSH creates a signed SSH certificate using the old SSH certificate as a template.
 func (a *Authority) RenewSSH(oldCert *ssh.Certificate) (*ssh.Certificate, error) {
 	nonce, err := randutil.ASCII(32)
@@ -437,30 +397,6 @@ func (a *Authority) RenewSSH(oldCert *ssh.Certificate) (*ssh.Certificate, error)
 	}
 
 	return cert, nil
-}
-
-// authorizeSSHRekey authorizes an SSH certificate rekey request, by
-// validating the contents of an SSHPOP token.
-func (a *Authority) authorizeSSHRekey(ctx context.Context, token string) (*ssh.Certificate, []provisioner.SignOption, error) {
-	errContext := map[string]interface{}{"ott": token}
-
-	p, err := a.authorizeToken(ctx, token)
-	if err != nil {
-		return nil, nil, &apiError{
-			err:     errors.Wrap(err, "authorizeSSHRenew"),
-			code:    http.StatusUnauthorized,
-			context: errContext,
-		}
-	}
-	cert, opts, err := p.AuthorizeSSHRekey(ctx, token)
-	if err != nil {
-		return nil, nil, &apiError{
-			err:     errors.Wrap(err, "authorizeSSHRekey"),
-			code:    http.StatusUnauthorized,
-			context: errContext,
-		}
-	}
-	return cert, opts, nil
 }
 
 // RekeySSH creates a signed SSH certificate using the old SSH certificate as a template.
@@ -572,21 +508,6 @@ func (a *Authority) RekeySSH(oldCert *ssh.Certificate, pub ssh.PublicKey, signOp
 	}
 
 	return cert, nil
-}
-
-// authorizeSSHRevoke authorizes an SSH certificate revoke request, by
-// validating the contents of an SSHPOP token.
-func (a *Authority) authorizeSSHRevoke(ctx context.Context, token string) error {
-	errContext := map[string]interface{}{"ott": token}
-
-	p, err := a.authorizeToken(ctx, token)
-	if err != nil {
-		return &apiError{errors.Wrap(err, "authorizeSSHRevoke"), http.StatusUnauthorized, errContext}
-	}
-	if err = p.AuthorizeSSHRevoke(ctx, token); err != nil {
-		return &apiError{errors.Wrap(err, "authorizeSSHRevoke"), http.StatusUnauthorized, errContext}
-	}
-	return nil
 }
 
 // SignSSHAddUser signs a certificate that provisions a new user in a server.
