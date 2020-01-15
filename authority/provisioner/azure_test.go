@@ -227,7 +227,7 @@ func TestAzure_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing azure token"),
+				err:   errors.New("azure.authorizeToken; error parsing azure token"),
 			}
 		},
 		"fail/cannot-validate-sig": func(t *testing.T) test {
@@ -244,7 +244,7 @@ func TestAzure_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: cannot validate azure token"),
+				err:   errors.New("azure.authorizeToken; cannot validate azure token"),
 			}
 		},
 		"fail/invalid-token-issuer": func(t *testing.T) test {
@@ -259,7 +259,7 @@ func TestAzure_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: failed to validate azure token payload"),
+				err:   errors.New("azure.authorizeToken; failed to validate azure token payload"),
 			}
 		},
 		"fail/invalid-tenant-id": func(t *testing.T) test {
@@ -274,7 +274,7 @@ func TestAzure_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: azure token validation failed - invalid tenant id claim (tid)"),
+				err:   errors.New("azure.authorizeToken; azure token validation failed - invalid tenant id claim (tid)"),
 			}
 		},
 		"fail/invalid-xms-mir-id": func(t *testing.T) test {
@@ -313,7 +313,7 @@ func TestAzure_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing xms_mirid claim - foo"),
+				err:   errors.New("azure.authorizeToken; error parsing xms_mirid claim - foo"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -603,7 +603,7 @@ func TestAzure_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+				err:   errors.New("provisioner.AuthorizeRevoke not implemented"),
 			}
 		},
 	}
@@ -638,7 +638,7 @@ func TestAzure_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -673,7 +673,7 @@ func TestAzure_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -710,7 +710,7 @@ func TestAzure_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}

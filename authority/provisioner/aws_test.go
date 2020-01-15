@@ -723,7 +723,7 @@ func TestAWS_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+				err:   errors.New("provisioner.AuthorizeRevoke not implemented"),
 			}
 		},
 	}
@@ -758,7 +758,7 @@ func TestAWS_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -793,7 +793,7 @@ func TestAWS_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -830,7 +830,7 @@ func TestAWS_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}

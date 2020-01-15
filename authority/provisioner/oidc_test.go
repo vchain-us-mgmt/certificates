@@ -678,7 +678,7 @@ func TestOIDC_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}
@@ -714,7 +714,7 @@ func TestOIDC_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}

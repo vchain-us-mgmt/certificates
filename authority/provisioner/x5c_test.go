@@ -172,7 +172,7 @@ func TestX5C_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing x5c token"),
+				err:   errors.New("x5c.authorizeToken; error parsing x5c token"),
 			}
 		},
 		"fail/invalid-cert-chain": func(t *testing.T) test {
@@ -200,7 +200,7 @@ a5wpg+9s6QIgHIW6L60F8klQX+EO3o0SBqLeNcaskA4oSZsKjEdpSGo=
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error verifying x5c certificate chain in token"),
+				err:   errors.New("x5c.authorizeToken; error verifying x5c certificate chain in token"),
 			}
 		},
 		"fail/doubled-up-self-signed-cert": func(t *testing.T) test {
@@ -239,7 +239,7 @@ EXAHTA9L
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error verifying x5c certificate chain in token"),
+				err:   errors.New("x5c.authorizeToken; error verifying x5c certificate chain in token"),
 			}
 		},
 		"fail/digital-signature-ext-required": func(t *testing.T) test {
@@ -281,7 +281,7 @@ lgsqsR63is+0YQ==
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: certificate used to sign x5c token cannot be used for digital signature"),
+				err:   errors.New("x5c.authorizeToken; certificate used to sign x5c token cannot be used for digital signature"),
 			}
 		},
 		"fail/signature-does-not-match-x5c-pub-key": func(t *testing.T) test {
@@ -322,7 +322,7 @@ lgsqsR63is+0YQ==
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing x5c claims"),
+				err:   errors.New("x5c.authorizeToken; error parsing x5c claims"),
 			}
 		},
 		"fail/invalid-issuer": func(t *testing.T) test {
@@ -336,7 +336,7 @@ lgsqsR63is+0YQ==
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid x5c claims"),
+				err:   errors.New("x5c.authorizeToken; invalid x5c claims"),
 			}
 		},
 		"fail/invalid-audience": func(t *testing.T) test {
@@ -350,7 +350,7 @@ lgsqsR63is+0YQ==
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: x5c token has invalid audience claim (aud)"),
+				err:   errors.New("x5c.authorizeToken; x5c token has invalid audience claim (aud)"),
 			}
 		},
 		"fail/empty-subject": func(t *testing.T) test {
@@ -364,7 +364,7 @@ lgsqsR63is+0YQ==
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: x5c token subject cannot be empty"),
+				err:   errors.New("x5c.authorizeToken; x5c token subject cannot be empty"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -423,7 +423,7 @@ func TestX5C_AuthorizeSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSign: authorizeToken: error parsing x5c token"),
+				err:   errors.New("x5c.AuthorizeSign: x5c.authorizeToken; error parsing x5c token"),
 			}
 		},
 		"ok/empty-sans": func(t *testing.T) test {
@@ -524,7 +524,7 @@ func TestX5C_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeRevoke: authorizeToken: error parsing x5c token"),
+				err:   errors.New("x5c.AuthorizeRevoke: x5c.authorizeToken; error parsing x5c token"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -580,7 +580,7 @@ func TestX5C_AuthorizeRenew(t *testing.T) {
 			return test{
 				p:    p,
 				code: http.StatusUnauthorized,
-				err:  errors.Errorf("authorizeRenew: renew is disabled for x5c provisioner %s", p.GetID()),
+				err:  errors.Errorf("x5c.AuthorizeRenew; renew is disabled for x5c provisioner %s", p.GetID()),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -636,7 +636,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.Errorf("authorizeSSHSign: sshCA is disabled for x5c provisioner %s", p.GetID()),
+				err:   errors.Errorf("x5c.AuthorizeSSHSign; sshCA is disabled for x5c provisioner %s", p.GetID()),
 			}
 		},
 		"fail/invalid-token": func(t *testing.T) test {
@@ -646,7 +646,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHSign: authorizeToken: error parsing x5c token"),
+				err:   errors.New("x5c.AuthorizeSSHSign: x5c.authorizeToken; error parsing x5c token"),
 			}
 		},
 		"fail/no-Step-claim": func(t *testing.T) test {
@@ -660,7 +660,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHSign: x5c token must be an SSH provisioning token"),
+				err:   errors.New("x5c.AuthorizeSSHSign; x5c token must be an SSH provisioning token"),
 			}
 		},
 		"fail/no-SSH-subattribute-in-claims": func(t *testing.T) test {
@@ -688,7 +688,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHSign: x5c token must be an SSH provisioning token"),
+				err:   errors.New("x5c.AuthorizeSSHSign; x5c token must be an SSH provisioning token"),
 			}
 		},
 		"ok/with-claims": func(t *testing.T) test {
@@ -786,7 +786,7 @@ func TestX5C_AuthorizeSSHSign(t *testing.T) {
 								assert.Equals(t, SSHOptions(v), SSHOptions{CertType: SSHUserCert})
 							case *sshLimitDuration:
 								assert.Equals(t, v.Claimer, tc.p.claimer)
-								assert.Equals(t, v.NotAfter, tc.claims.chains[0][0].NotAfter)
+								assert.Equals(t, v.NotAfter, x5cCerts[0].NotAfter)
 							case *sshCertificateValidityValidator:
 								assert.Equals(t, v.Claimer, tc.p.claimer)
 							case *sshDefaultExtensionModifier, *sshDefaultPublicKeyValidator,
@@ -825,7 +825,7 @@ func TestX5C_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -860,7 +860,7 @@ func TestX5C_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -897,7 +897,7 @@ func TestX5C_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}

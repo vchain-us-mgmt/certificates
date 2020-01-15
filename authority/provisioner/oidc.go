@@ -243,14 +243,14 @@ func (o *OIDC) authorizeToken(token string) (*openIDPayload, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
 		return nil, errs.Wrap(http.StatusUnauthorized, err,
-			"authorizeToken: error parsing oidc token")
+			"oidc.AuthorizeToken; error parsing oidc token")
 	}
 
 	// Parse claims to get the kid
 	var claims openIDPayload
 	if err := jwt.UnsafeClaimsWithoutVerification(&claims); err != nil {
 		return nil, errs.Wrap(http.StatusUnauthorized, err,
-			"authorizeToken: error parsing oidc token claims")
+			"oidc.AuthorizeToken; error parsing oidc token claims")
 	}
 
 	found := false
@@ -263,11 +263,11 @@ func (o *OIDC) authorizeToken(token string) (*openIDPayload, error) {
 		}
 	}
 	if !found {
-		return nil, errs.Unauthorized(errors.New("authorizeToken: cannot validate oidc token"))
+		return nil, errs.Unauthorized(errors.New("oidc.AuthorizeToken; cannot validate oidc token"))
 	}
 
 	if err := o.ValidatePayload(claims); err != nil {
-		return nil, errs.Unauthorized(err)
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeToken")
 	}
 
 	return &claims, nil
@@ -279,21 +279,21 @@ func (o *OIDC) authorizeToken(token string) (*openIDPayload, error) {
 func (o *OIDC) AuthorizeRevoke(ctx context.Context, token string) error {
 	claims, err := o.authorizeToken(token)
 	if err != nil {
-		return errs.Wrap(http.StatusInternalServerError, err, "authorizeRevoke")
+		return errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeRevoke")
 	}
 
 	// Only admins can revoke certificates.
 	if o.IsAdmin(claims.Email) {
 		return nil
 	}
-	return errs.Unauthorized(errors.New("authorizeRevoke: cannot revoke with non-admin oidc token"))
+	return errs.Unauthorized(errors.New("oidc.AuthorizeRevoke; cannot revoke with non-admin oidc token"))
 }
 
 // AuthorizeSign validates the given token.
 func (o *OIDC) AuthorizeSign(ctx context.Context, token string) ([]SignOption, error) {
 	claims, err := o.authorizeToken(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeRevoke")
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeSign")
 	}
 
 	so := []SignOption{
@@ -318,7 +318,7 @@ func (o *OIDC) AuthorizeSign(ctx context.Context, token string) ([]SignOption, e
 // certificate was configured to allow renewals.
 func (o *OIDC) AuthorizeRenew(ctx context.Context, cert *x509.Certificate) error {
 	if o.claimer.IsDisableRenewal() {
-		return errs.Unauthorized(errors.Errorf("authorizeRenew: renew is disabled for oidc provisioner %s", o.GetID()))
+		return errs.Unauthorized(errors.Errorf("oidc.AuthorizeRenew; renew is disabled for oidc provisioner %s", o.GetID()))
 	}
 	return nil
 }
@@ -326,11 +326,11 @@ func (o *OIDC) AuthorizeRenew(ctx context.Context, cert *x509.Certificate) error
 // AuthorizeSSHSign returns the list of SignOption for a SignSSH request.
 func (o *OIDC) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption, error) {
 	if !o.claimer.IsSSHCAEnabled() {
-		return nil, errs.Unauthorized(errors.Errorf("authorizeSSHSign: sshCA is disabled for oidc provisioner %s", o.GetID()))
+		return nil, errs.Unauthorized(errors.Errorf("oidc.AuthorizeSSHSign; sshCA is disabled for oidc provisioner %s", o.GetID()))
 	}
 	claims, err := o.authorizeToken(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHSign")
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeSSHSign")
 	}
 	signOptions := []SignOption{
 		// set the key id to the token email
@@ -341,7 +341,7 @@ func (o *OIDC) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption
 	// externally.
 	iden, err := o.getIdentityFunc(o, claims.Email)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHSign")
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeSSHSign")
 	}
 	defaults := SSHOptions{
 		CertType:   SSHUserCert,
@@ -377,12 +377,12 @@ func (o *OIDC) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption
 func (o *OIDC) AuthorizeSSHRevoke(ctx context.Context, token string) error {
 	claims, err := o.authorizeToken(token)
 	if err != nil {
-		return errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHSign")
+		return errs.Wrap(http.StatusInternalServerError, err, "oidc.AuthorizeSSHRevoke")
 	}
 
 	// Only admins can revoke certificates.
 	if !o.IsAdmin(claims.Email) {
-		return errs.Unauthorized(errors.New("authorizeSSHRevoke: cannot revoke with non-admin oidc token"))
+		return errs.Unauthorized(errors.New("oidc.AuthorizeSSHRevoke; cannot revoke with non-admin oidc token"))
 	}
 	return nil
 }

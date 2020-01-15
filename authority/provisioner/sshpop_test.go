@@ -81,7 +81,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+				err:   errors.New("sshpop.authorizeToken; error extracting sshpop header from token: extractSSHPOPCert; error parsing token: "),
 			}
 		},
 		"fail/error-revoked-db-check": func(t *testing.T) test {
@@ -100,7 +100,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusInternalServerError,
-				err:   errors.New("authorizeToken: error checking checking sshpop cert revocation: fatal"),
+				err:   errors.New("sshpop.authorizeToken; error checking checking sshpop cert revocation: fatal"),
 			}
 		},
 		"fail/cert-already-revoked": func(t *testing.T) test {
@@ -119,7 +119,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: sshpop certificate is revoked"),
+				err:   errors.New("sshpop.authorizeToken; sshpop certificate is revoked"),
 			}
 		},
 		"fail/cert-not-yet-valid": func(t *testing.T) test {
@@ -141,7 +141,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: sshpop certificate validAfter is in the future"),
+				err:   errors.New("sshpop.authorizeToken; sshpop certificate validAfter is in the future"),
 			}
 		},
 		"fail/cert-past-validity": func(t *testing.T) test {
@@ -163,7 +163,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: sshpop certificate validBefore is in the past"),
+				err:   errors.New("sshpop.authorizeToken; sshpop certificate validBefore is in the past"),
 			}
 		},
 		"fail/no-signer-found": func(t *testing.T) test {
@@ -182,7 +182,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: could not find valid ca signer to verify sshpop certificate"),
+				err:   errors.New("sshpop.authorizeToken; could not find valid ca signer to verify sshpop certificate"),
 			}
 		},
 		"fail/error-parsing-claims-bad-sig": func(t *testing.T) test {
@@ -203,7 +203,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing sshpop token claims"),
+				err:   errors.New("sshpop.authorizeToken; error parsing sshpop token claims"),
 			}
 		},
 		"fail/invalid-claims-issuer": func(t *testing.T) test {
@@ -223,7 +223,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid sshpop token"),
+				err:   errors.New("sshpop.authorizeToken; invalid sshpop token"),
 			}
 		},
 		"fail/invalid-audience": func(t *testing.T) test {
@@ -243,7 +243,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: sshpop token has invalid audience claim (aud)"),
+				err:   errors.New("sshpop.authorizeToken; sshpop token has invalid audience claim (aud)"),
 			}
 		},
 		"fail/empty-subject": func(t *testing.T) test {
@@ -263,7 +263,7 @@ func TestSSHPOP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: sshpop token subject cannot be empty"),
+				err:   errors.New("sshpop.authorizeToken; sshpop token subject cannot be empty"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -325,7 +325,7 @@ func TestSSHPOP_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+				err:   errors.New("sshpop.AuthorizeSSHRevoke: sshpop.authorizeToken; error extracting sshpop header from token: extractSSHPOPCert; error parsing token: "),
 			}
 		},
 		"fail/subject-not-equal-serial": func(t *testing.T) test {
@@ -345,7 +345,7 @@ func TestSSHPOP_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusBadRequest,
-				err:   errors.New("authoritzeSSHRevoke: sshpop token subject must be equivalent to sshpop certificate serial number"),
+				err:   errors.New("sshpop.AuthorizeSSHRevoke; sshpop token subject must be equivalent to sshpop certificate serial number"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -414,7 +414,7 @@ func TestSSHPOP_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+				err:   errors.New("sshpop.AuthorizeSSHRenew: sshpop.authorizeToken; error extracting sshpop header from token: extractSSHPOPCert; error parsing token: "),
 			}
 		},
 		"fail/not-host-cert": func(t *testing.T) test {
@@ -434,7 +434,7 @@ func TestSSHPOP_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusBadRequest,
-				err:   errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"),
+				err:   errors.New("sshpop.AuthorizeSSHRenew; sshpop certificate must be a host ssh certificate"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -506,7 +506,7 @@ func TestSSHPOP_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHRevoke: authorizeToken: error extracting sshpop header from token: extractSSHPOPCert: error parsing token: "),
+				err:   errors.New("sshpop.AuthorizeSSHRekey: sshpop.authorizeToken; error extracting sshpop header from token: extractSSHPOPCert; error parsing token: "),
 			}
 		},
 		"fail/not-host-cert": func(t *testing.T) test {
@@ -526,7 +526,7 @@ func TestSSHPOP_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusBadRequest,
-				err:   errors.New("authorizeSSHRenew: sshpop certificate must be a host ssh certificate"),
+				err:   errors.New("sshpop.AuthorizeSSHRekey; sshpop certificate must be a host ssh certificate"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -597,7 +597,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 		"fail/bad-token": func(t *testing.T) test {
 			return test{
 				token: "foo",
-				err:   errors.New("extractSSHPOPCert: error parsing token"),
+				err:   errors.New("extractSSHPOPCert; error parsing token"),
 			}
 		},
 		"fail/sshpop-missing": func(t *testing.T) test {
@@ -608,7 +608,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 			assert.FatalError(t, err)
 			return test{
 				token: tok,
-				err:   errors.New("extractSSHPOPCert: token missing sshpop header"),
+				err:   errors.New("extractSSHPOPCert; token missing sshpop header"),
 			}
 		},
 		"fail/wrong-sshpop-type": func(t *testing.T) test {
@@ -622,7 +622,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 			assert.FatalError(t, err)
 			return test{
 				token: tok,
-				err:   errors.New("extractSSHPOPCert: error unexpected type for sshpop header: "),
+				err:   errors.New("extractSSHPOPCert; error unexpected type for sshpop header: "),
 			}
 		},
 		"fail/base64decode-error": func(t *testing.T) test {
@@ -636,7 +636,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 			assert.FatalError(t, err)
 			return test{
 				token: tok,
-				err:   errors.New("extractSSHPOPCert: error base64 decoding sshpop header: illegal base64"),
+				err:   errors.New("extractSSHPOPCert; error base64 decoding sshpop header: illegal base64"),
 			}
 		},
 		"fail/parsing-sshpop-pubkey": func(t *testing.T) test {
@@ -650,7 +650,7 @@ func TestSSHPOP_ExtractSSHPOPCert(t *testing.T) {
 			assert.FatalError(t, err)
 			return test{
 				token: tok,
-				err:   errors.New("extractSSHPOPCert: error parsing ssh public key"),
+				err:   errors.New("extractSSHPOPCert; error parsing ssh public key"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -699,7 +699,7 @@ func TestSSHPOP_AuthorizeSSHSign(t *testing.T) {
 				token: "foo",
 				p:     p,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHSign"),
+				err:   errors.New("provisioner.AuthorizeSSHSign not implemented"),
 			}
 		},
 	}
@@ -736,7 +736,7 @@ func TestSSHPOP_AuthorizeSign(t *testing.T) {
 				token: "foo",
 				p:     p,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSign"),
+				err:   errors.New("provisioner.AuthorizeSign not implemented"),
 			}
 		},
 	}
@@ -773,7 +773,7 @@ func TestSSHPOP_AuthorizeRenew(t *testing.T) {
 				cert: &x509.Certificate{},
 				p:    p,
 				code: http.StatusUnauthorized,
-				err:  errors.New("not implemented; provisioner does not implement AuthorizeRenew"),
+				err:  errors.New("provisioner.AuthorizeRenew not implemented"),
 			}
 		},
 	}
@@ -809,7 +809,7 @@ func TestSSHPOP_AuthorizeRevoke(t *testing.T) {
 				token: "foo",
 				p:     p,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+				err:   errors.New("provisioner.AuthorizeRevoke not implemented"),
 			}
 		},
 	}

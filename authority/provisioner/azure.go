@@ -214,10 +214,10 @@ func (p *Azure) Init(config Config) (err error) {
 func (p *Azure) authorizeToken(token string) (*azurePayload, string, string, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
-		return nil, "", "", errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: error parsing azure token")
+		return nil, "", "", errs.Wrap(http.StatusUnauthorized, err, "azure.authorizeToken; error parsing azure token")
 	}
 	if len(jwt.Headers) == 0 {
-		return nil, "", "", errs.Unauthorized(errors.New("authorizeToken: azure token missing header"))
+		return nil, "", "", errs.Unauthorized(errors.New("azure.authorizeToken; azure token missing header"))
 	}
 
 	var found bool
@@ -230,7 +230,7 @@ func (p *Azure) authorizeToken(token string) (*azurePayload, string, string, err
 		}
 	}
 	if !found {
-		return nil, "", "", errs.Unauthorized(errors.New("authorizeToken: cannot validate azure token"))
+		return nil, "", "", errs.Unauthorized(errors.New("azure.authorizeToken; cannot validate azure token"))
 	}
 
 	if err := claims.ValidateWithLeeway(jose.Expected{
@@ -238,17 +238,17 @@ func (p *Azure) authorizeToken(token string) (*azurePayload, string, string, err
 		Issuer:   p.oidcConfig.Issuer,
 		Time:     time.Now(),
 	}, 1*time.Minute); err != nil {
-		return nil, "", "", errs.Wrap(http.StatusUnauthorized, err, "authorizeToken: failed to validate azure token payload")
+		return nil, "", "", errs.Wrap(http.StatusUnauthorized, err, "azure.authorizeToken; failed to validate azure token payload")
 	}
 
 	// Validate TenantID
 	if claims.TenantID != p.TenantID {
-		return nil, "", "", errs.Unauthorized(errors.New("authorizeToken: azure token validation failed - invalid tenant id claim (tid)"))
+		return nil, "", "", errs.Unauthorized(errors.New("azure.authorizeToken; azure token validation failed - invalid tenant id claim (tid)"))
 	}
 
 	re := azureXMSMirIDRegExp.FindStringSubmatch(claims.XMSMirID)
 	if len(re) != 4 {
-		return nil, "", "", errs.Unauthorized(errors.Errorf("authorizeToken: error parsing xms_mirid claim - %s", claims.XMSMirID))
+		return nil, "", "", errs.Unauthorized(errors.Errorf("azure.authorizeToken; error parsing xms_mirid claim - %s", claims.XMSMirID))
 	}
 	group, name := re[2], re[3]
 	return &claims, name, group, nil
@@ -259,7 +259,7 @@ func (p *Azure) authorizeToken(token string) (*azurePayload, string, string, err
 func (p *Azure) AuthorizeSign(ctx context.Context, token string) ([]SignOption, error) {
 	_, name, group, err := p.authorizeToken(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSign")
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "azure.AuthorizeSign")
 	}
 
 	// Filter by resource group
@@ -272,7 +272,7 @@ func (p *Azure) AuthorizeSign(ctx context.Context, token string) ([]SignOption, 
 			}
 		}
 		if !found {
-			return nil, errs.Unauthorized(errors.New("authorizeSign: azure token validation failed - invalid resource group"))
+			return nil, errs.Unauthorized(errors.New("azure.AuthorizeSign; azure token validation failed - invalid resource group"))
 		}
 	}
 
@@ -302,7 +302,7 @@ func (p *Azure) AuthorizeSign(ctx context.Context, token string) ([]SignOption, 
 // certificate was configured to allow renewals.
 func (p *Azure) AuthorizeRenew(ctx context.Context, cert *x509.Certificate) error {
 	if p.claimer.IsDisableRenewal() {
-		return errs.Unauthorized(errors.Errorf("authorizeRenew: renew is disabled for azure provisioner %s", p.GetID()))
+		return errs.Unauthorized(errors.Errorf("azure.AuthorizeRenew; renew is disabled for azure provisioner %s", p.GetID()))
 	}
 	return nil
 }
@@ -310,12 +310,12 @@ func (p *Azure) AuthorizeRenew(ctx context.Context, cert *x509.Certificate) erro
 // AuthorizeSSHSign returns the list of SignOption for a SignSSH request.
 func (p *Azure) AuthorizeSSHSign(ctx context.Context, token string) ([]SignOption, error) {
 	if !p.claimer.IsSSHCAEnabled() {
-		return nil, errs.Unauthorized(errors.Errorf("authorizeSSHSign: sshCA is disabled for provisioner %s", p.GetID()))
+		return nil, errs.Unauthorized(errors.Errorf("azure.AuthorizeSSHSign; sshCA is disabled for provisioner %s", p.GetID()))
 	}
 
 	_, name, _, err := p.authorizeToken(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusInternalServerError, err, "authorizeSSHSign")
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "azure.AuthorizeSSHSign")
 	}
 	signOptions := []SignOption{
 		// set the key id to the token subject

@@ -48,7 +48,7 @@ func TestK8sSA_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing k8sSA token"),
+				err:   errors.New("k8ssa.authorizeToken; error parsing k8sSA token"),
 			}
 		},
 		"fail/not-implemented": func(t *testing.T) test {
@@ -63,7 +63,7 @@ func TestK8sSA_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				err:   errors.New("authorizeToken: k8sSA TokenReview API integration not implemented"),
+				err:   errors.New("k8ssa.authorizeToken; k8sSA TokenReview API integration not implemented"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -78,7 +78,7 @@ func TestK8sSA_authorizeToken(t *testing.T) {
 			return test{
 				p:     p,
 				token: tok,
-				err:   errors.New("authorizeToken: error validating k8sSA token and extracting claims"),
+				err:   errors.New("k8ssa.authorizeToken; error validating k8sSA token and extracting claims"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -95,7 +95,7 @@ func TestK8sSA_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid k8sSA token claims: square/go-jose/jwt: validation failed, invalid issuer claim (iss)"),
+				err:   errors.New("k8ssa.authorizeToken; invalid k8sSA token claims: square/go-jose/jwt: validation failed, invalid issuer claim (iss)"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -145,7 +145,7 @@ func TestK8sSA_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeRevoke: authorizeToken: error parsing k8sSA token"),
+				err:   errors.New("k8ssa.AuthorizeRevoke: k8ssa.authorizeToken; error parsing k8sSA token"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -198,7 +198,7 @@ func TestK8sSA_AuthorizeRenew(t *testing.T) {
 				p:    p,
 				cert: &x509.Certificate{},
 				code: http.StatusUnauthorized,
-				err:  errors.Errorf("authorizeRenew: renew is disabled for k8sSA provisioner %s", p.GetID()),
+				err:  errors.Errorf("k8ssa.AuthorizeRenew; renew is disabled for k8sSA provisioner %s", p.GetID()),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -242,7 +242,7 @@ func TestK8sSA_AuthorizeSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSign: authorizeToken: error parsing k8sSA token"),
+				err:   errors.New("k8ssa.AuthorizeSign: k8ssa.authorizeToken; error parsing k8sSA token"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -318,7 +318,7 @@ func TestK8sSA_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.Errorf("authorizeSSHSign: sshCA is disabled for k8sSA provisioner %s", p.GetID()),
+				err:   errors.Errorf("k8ssa.AuthorizeSSHSign; sshCA is disabled for k8sSA provisioner %s", p.GetID()),
 			}
 		},
 		"fail/invalid-token": func(t *testing.T) test {
@@ -328,7 +328,7 @@ func TestK8sSA_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeSSHSign: authorizeToken: error parsing k8sSA token"),
+				err:   errors.New("k8ssa.AuthorizeSSHSign: k8ssa.authorizeToken; error parsing k8sSA token"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -367,6 +367,8 @@ func TestK8sSA_AuthorizeSSHSign(t *testing.T) {
 								assert.Equals(t, v.Claimer, tc.p.claimer)
 							case *sshDefaultPublicKeyValidator:
 							case *sshCertificateDefaultValidator:
+							case *sshDefaultDuration:
+								assert.Equals(t, v.Claimer, tc.p.claimer)
 							default:
 								assert.FatalError(t, errors.Errorf("unexpected sign option of type %T", v))
 							}
@@ -395,7 +397,7 @@ func TestK8sSA_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -430,7 +432,7 @@ func TestK8sSA_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -467,7 +469,7 @@ func TestK8sSA_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}

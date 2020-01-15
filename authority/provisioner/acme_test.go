@@ -110,7 +110,7 @@ func TestACME_AuthorizeRenew(t *testing.T) {
 				p:    p,
 				cert: &x509.Certificate{},
 				code: http.StatusUnauthorized,
-				err:  errors.Errorf("authorizeRenew: renew is disabled for acme provisioner %s", p.GetID()),
+				err:  errors.Errorf("acme.AuthorizeRenew; renew is disabled for acme provisioner %s", p.GetID()),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -209,7 +209,7 @@ func TestACME_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+				err:   errors.New("provisioner.AuthorizeRevoke not implemented"),
 			}
 		},
 	}
@@ -244,7 +244,7 @@ func TestACME_AuthorizeSSHSign(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHSign"),
+				err:   errors.New("provisioner.AuthorizeSSHSign not implemented"),
 			}
 		},
 	}
@@ -280,7 +280,7 @@ func TestACME_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -315,7 +315,7 @@ func TestACME_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}
@@ -351,7 +351,7 @@ func TestACME_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}

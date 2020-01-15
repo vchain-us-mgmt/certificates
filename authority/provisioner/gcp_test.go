@@ -229,7 +229,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing gcp token"),
+				err:   errors.New("gcp.authorizeToken; error parsing gcp token"),
 			}
 		},
 		"fail/cannot-validate-sig": func(t *testing.T) test {
@@ -246,7 +246,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: failed to validate gcp token payload - cannot find key for kid "),
+				err:   errors.New("gcp.authorizeToken; failed to validate gcp token payload - cannot find key for kid "),
 			}
 		},
 		"fail/invalid-issuer": func(t *testing.T) test {
@@ -261,7 +261,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid gcp token payload"),
+				err:   errors.New("gcp.authorizeToken; invalid gcp token payload"),
 			}
 		},
 		"fail/invalid-serviceAccount": func(t *testing.T) test {
@@ -276,7 +276,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid gcp token - invalid subject claim"),
+				err:   errors.New("gcp.authorizeToken; invalid gcp token - invalid subject claim"),
 			}
 		},
 		"fail/invalid-projectID": func(t *testing.T) test {
@@ -292,7 +292,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid gcp token - invalid project id"),
+				err:   errors.New("gcp.authorizeToken; invalid gcp token - invalid project id"),
 			}
 		},
 		"fail/instance-age": func(t *testing.T) test {
@@ -308,7 +308,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: token google.compute_engine.instance_creation_timestamp is too old"),
+				err:   errors.New("gcp.authorizeToken; token google.compute_engine.instance_creation_timestamp is too old"),
 			}
 		},
 		"fail/empty-instance-id": func(t *testing.T) test {
@@ -324,7 +324,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: gcp token google.compute_engine.instance_id cannot be empty"),
+				err:   errors.New("gcp.authorizeToken; gcp token google.compute_engine.instance_id cannot be empty"),
 			}
 		},
 		"fail/empty-instance-name": func(t *testing.T) test {
@@ -340,7 +340,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: gcp token google.compute_engine.instance_name cannot be empty"),
+				err:   errors.New("gcp.authorizeToken; gcp token google.compute_engine.instance_name cannot be empty"),
 			}
 		},
 		"fail/empty-project-id": func(t *testing.T) test {
@@ -356,7 +356,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: gcp token google.compute_engine.project_id cannot be empty"),
+				err:   errors.New("gcp.authorizeToken; gcp token google.compute_engine.project_id cannot be empty"),
 			}
 		},
 		"fail/empty-zone": func(t *testing.T) test {
@@ -372,7 +372,7 @@ func TestGCP_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: gcp token google.compute_engine.zone cannot be empty"),
+				err:   errors.New("gcp.authorizeToken; gcp token google.compute_engine.zone cannot be empty"),
 			}
 		},
 	}
@@ -692,7 +692,7 @@ func TestGCP_AuthorizeRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeRevoke"),
+				err:   errors.New("provisioner.AuthorizeRevoke not implemented"),
 			}
 		},
 	}
@@ -727,7 +727,7 @@ func TestGCP_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRevoke"),
+				err:   errors.New("provisioner.AuthorizeSSHRevoke not implemented"),
 			}
 		},
 	}
@@ -762,7 +762,7 @@ func TestGCP_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -799,7 +799,7 @@ func TestGCP_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}
