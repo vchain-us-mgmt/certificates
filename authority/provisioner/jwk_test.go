@@ -167,15 +167,15 @@ func TestJWK_authorizeToken(t *testing.T) {
 		code int
 		err  error
 	}{
-		{"fail-token", p1, args{failTok}, http.StatusUnauthorized, errors.New("authorizeToken: error parsing jwk token")},
-		{"fail-key", p1, args{failKey}, http.StatusUnauthorized, errors.New("authorizeToken: error parsing jwk claims")},
-		{"fail-claims", p1, args{failClaims}, http.StatusUnauthorized, errors.New("authorizeToken: error parsing jwk claims")},
-		{"fail-signature", p1, args{failSig}, http.StatusUnauthorized, errors.New("authorizeToken: error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
-		{"fail-issuer", p1, args{failIss}, http.StatusUnauthorized, errors.New("authorizeToken: invalid jwk claims: square/go-jose/jwt: validation failed, invalid issuer claim (iss)")},
-		{"fail-expired", p1, args{failExp}, http.StatusUnauthorized, errors.New("authorizeToken: invalid jwk claims: square/go-jose/jwt: validation failed, token is expired (exp)")},
-		{"fail-not-before", p1, args{failNbf}, http.StatusUnauthorized, errors.New("authorizeToken: invalid jwk claims: square/go-jose/jwt: validation failed, token not valid yet (nbf)")},
-		{"fail-audience", p1, args{failAud}, http.StatusUnauthorized, errors.New("authorizeToken: invalid jwk token audience claim (aud)")},
-		{"fail-subject", p1, args{failSub}, http.StatusUnauthorized, errors.New("authorizeToken: jwk token subject cannot be empty")},
+		{"fail-token", p1, args{failTok}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; error parsing jwk token")},
+		{"fail-key", p1, args{failKey}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; error parsing jwk claims")},
+		{"fail-claims", p1, args{failClaims}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; error parsing jwk claims")},
+		{"fail-signature", p1, args{failSig}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
+		{"fail-issuer", p1, args{failIss}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; invalid jwk claims: square/go-jose/jwt: validation failed, invalid issuer claim (iss)")},
+		{"fail-expired", p1, args{failExp}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; invalid jwk claims: square/go-jose/jwt: validation failed, token is expired (exp)")},
+		{"fail-not-before", p1, args{failNbf}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; invalid jwk claims: square/go-jose/jwt: validation failed, token not valid yet (nbf)")},
+		{"fail-audience", p1, args{failAud}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; invalid jwk token audience claim (aud)")},
+		{"fail-subject", p1, args{failSub}, http.StatusUnauthorized, errors.New("jwk.authorizeToken; jwk token subject cannot be empty")},
 		{"ok", p1, args{t1}, http.StatusOK, nil},
 		{"ok-no-encrypted-key", p2, args{t2}, http.StatusOK, nil},
 		{"ok-no-sans", p1, args{t3}, http.StatusOK, nil},
@@ -217,7 +217,7 @@ func TestJWK_AuthorizeRevoke(t *testing.T) {
 		code int
 		err  error
 	}{
-		{"fail-signature", p1, args{failSig}, http.StatusUnauthorized, errors.New("authorizeRevoke: authorizeToken: error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
+		{"fail-signature", p1, args{failSig}, http.StatusUnauthorized, errors.New("jwk.AuthorizeRevoke: jwk.authorizeToken; error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
 		{"ok", p1, args{t1}, http.StatusOK, nil},
 	}
 	for _, tt := range tests {
@@ -262,7 +262,7 @@ func TestJWK_AuthorizeSign(t *testing.T) {
 		emails []string
 		ips    []net.IP
 	}{
-		{name: "fail-signature", prov: p1, args: args{failSig}, code: http.StatusUnauthorized, err: errors.New("authorizeSign: authorizeToken: error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
+		{name: "fail-signature", prov: p1, args: args{failSig}, code: http.StatusUnauthorized, err: errors.New("jwk.AuthorizeSign: jwk.authorizeToken; error parsing jwk claims: square/go-jose: error in cryptographic primitive")},
 		{"ok-sans", p1, args{t1}, http.StatusOK, nil, []string{"foo"}, []string{"max@smallstep.com"}, []net.IP{net.ParseIP("127.0.0.1")}},
 		{"ok-no-sans", p1, args{t2}, http.StatusOK, nil, []string{"subject"}, []string{}, []net.IP{}},
 	}
@@ -428,8 +428,7 @@ func TestJWK_AuthorizeSSHSign(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := NewContextWithMethod(context.Background(), SignSSHMethod)
-			got, err := tt.prov.AuthorizeSSHSign(ctx, tt.args.token)
+			got, err := tt.prov.AuthorizeSSHSign(context.Background(), tt.args.token)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("JWK.AuthorizeSSHSign() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -543,10 +542,9 @@ func TestJWK_AuthorizeSign_SSHOptions(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := NewContextWithMethod(context.Background(), SignSSHMethod)
 			token, err := generateSSHToken(tt.args.sub, tt.args.iss, tt.args.aud, tt.args.iat, tt.args.tokSSHOpts, tt.args.jwk)
 			assert.FatalError(t, err)
-			if got, err := tt.prov.AuthorizeSSHSign(ctx, token); (err != nil) != tt.wantErr {
+			if got, err := tt.prov.AuthorizeSSHSign(context.Background(), token); (err != nil) != tt.wantErr {
 				t.Errorf("JWK.AuthorizeSSHSign() error = %v, wantErr %v", err, tt.wantErr)
 			} else if !tt.wantErr && assert.NotNil(t, got) {
 				var opts SSHOptions
@@ -583,7 +581,7 @@ func TestJWK_AuthorizeSSHRevoke(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authroizeSSHRevoke: authorizeToken: error parsing jwk token"),
+				err:   errors.New("jwk.AuthorizeSSHRevoke: jwk.authorizeToken; error parsing jwk token"),
 			}
 		},
 		"ok": func(t *testing.T) test {
@@ -632,7 +630,7 @@ func TestJWK_AuthorizeSSHRekey(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRekey"),
+				err:   errors.New("provisioner.AuthorizeSSHRekey not implemented"),
 			}
 		},
 	}
@@ -669,7 +667,7 @@ func TestJWK_AuthorizeSSHRenew(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("not implemented; provisioner does not implement AuthorizeSSHRenew"),
+				err:   errors.New("provisioner.AuthorizeSSHRenew not implemented"),
 			}
 		},
 	}

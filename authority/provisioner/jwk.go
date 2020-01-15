@@ -101,12 +101,12 @@ func (p *JWK) Init(config Config) (err error) {
 func (p *JWK) authorizeToken(token string, audiences []string) (*jwtPayload, error) {
 	jwt, err := jose.ParseSigned(token)
 	if err != nil {
-		return nil, errs.Wrap(http.StatusUnauthorized, err, "jwk.AuthorizeToken; error parsing jwk token")
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "jwk.authorizeToken; error parsing jwk token")
 	}
 
 	var claims jwtPayload
 	if err = jwt.Claims(p.Key, &claims); err != nil {
-		return nil, errs.Wrap(http.StatusUnauthorized, err, "jwk.AuthorizeToken; error parsing jwk claims")
+		return nil, errs.Wrap(http.StatusUnauthorized, err, "jwk.authorizeToken; error parsing jwk claims")
 	}
 
 	// According to "rfc7519 JSON Web Token" acceptable skew should be no
@@ -115,17 +115,17 @@ func (p *JWK) authorizeToken(token string, audiences []string) (*jwtPayload, err
 		Issuer: p.Name,
 		Time:   time.Now().UTC(),
 	}, time.Minute); err != nil {
-		return nil, errs.Wrapf(http.StatusUnauthorized, err, "jwk.AuthorizeToken; invalid jwk claims")
+		return nil, errs.Wrapf(http.StatusUnauthorized, err, "jwk.authorizeToken; invalid jwk claims")
 	}
 
 	// validate audiences with the defaults
 	if !matchesAudience(claims.Audience, audiences) {
-		return nil, errs.Unauthorized(errors.Errorf("jwk.AuthorizeToken; invalid jwk token audience claim (aud); want %s, but got %s",
+		return nil, errs.Unauthorized(errors.Errorf("jwk.authorizeToken; invalid jwk token audience claim (aud); want %s, but got %s",
 			audiences, claims.Audience))
 	}
 
 	if claims.Subject == "" {
-		return nil, errs.Unauthorized(errors.New("jwk.AuthorizeToken; jwk token subject cannot be empty"))
+		return nil, errs.Unauthorized(errors.New("jwk.authorizeToken; jwk token subject cannot be empty"))
 	}
 
 	return &claims, nil

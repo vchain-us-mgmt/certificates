@@ -580,8 +580,7 @@ func TestOIDC_AuthorizeSSHSign(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := NewContextWithMethod(context.Background(), SignSSHMethod)
-			got, err := tt.prov.AuthorizeSSHSign(ctx, tt.args.token)
+			got, err := tt.prov.AuthorizeSSHSign(context.Background(), tt.args.token)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("OIDC.AuthorizeSSHSign() error = %v, wantErr %v", err, tt.wantErr)
 				return

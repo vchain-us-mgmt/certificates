@@ -1,6 +1,7 @@
 package authority
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/pkg/errors"
@@ -9,7 +10,6 @@ import (
 	"github.com/smallstep/cli/crypto/tlsutil"
 	"github.com/smallstep/cli/crypto/x509util"
 	stepJOSE "github.com/smallstep/cli/jose"
-	jose "gopkg.in/square/go-jose.v2"
 )
 
 func TestConfigValidate(t *testing.T) {
@@ -255,17 +255,6 @@ func TestAuthConfigValidate(t *testing.T) {
 				err: errors.New("authority cannot be undefined"),
 			}
 		},
-		"fail-invalid-provisioners": func(t *testing.T) AuthConfigValidateTest {
-			return AuthConfigValidateTest{
-				ac: &AuthConfig{
-					Provisioners: provisioner.List{
-						&provisioner.JWK{Name: "foo", Type: "bar", Key: &jose.JSONWebKey{}},
-						&provisioner.JWK{Name: "foo", Key: &jose.JSONWebKey{}},
-					},
-				},
-				err: errors.New("provisioner type cannot be empty"),
-			}
-		},
 		"fail-invalid-claims": func(t *testing.T) AuthConfigValidateTest {
 			return AuthConfigValidateTest{
 				ac: &AuthConfig{
@@ -311,7 +300,7 @@ func TestAuthConfigValidate(t *testing.T) {
 					assert.Equals(t, tc.err.Error(), err.Error())
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
+				if assert.Nil(t, tc.err, fmt.Sprintf("expected error: %s, but got <nil>", tc.err)) {
 					assert.Equals(t, *tc.ac.Template, tc.asn1dn)
 				}
 			}

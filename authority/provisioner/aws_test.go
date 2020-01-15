@@ -256,7 +256,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: "foo",
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: error parsing aws token"),
+				err:   errors.New("aws.authorizeToken; error parsing aws token"),
 			}
 		},
 		"fail/cannot-validate-sig": func(t *testing.T) test {
@@ -271,7 +271,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid aws token signature"),
+				err:   errors.New("aws.authorizeToken; invalid aws token signature"),
 			}
 		},
 		"fail/empty-account-id": func(t *testing.T) test {
@@ -286,7 +286,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: aws identity document accountId cannot be empty"),
+				err:   errors.New("aws.authorizeToken; aws identity document accountId cannot be empty"),
 			}
 		},
 		"fail/empty-instance-id": func(t *testing.T) test {
@@ -301,7 +301,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: aws identity document instanceId cannot be empty"),
+				err:   errors.New("aws.authorizeToken; aws identity document instanceId cannot be empty"),
 			}
 		},
 		"fail/empty-private-ip": func(t *testing.T) test {
@@ -316,7 +316,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: aws identity document privateIp cannot be empty"),
+				err:   errors.New("aws.authorizeToken; aws identity document privateIp cannot be empty"),
 			}
 		},
 		"fail/empty-region": func(t *testing.T) test {
@@ -331,7 +331,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: aws identity document region cannot be empty"),
+				err:   errors.New("aws.authorizeToken; aws identity document region cannot be empty"),
 			}
 		},
 		"fail/invalid-token-issuer": func(t *testing.T) test {
@@ -346,7 +346,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid aws token"),
+				err:   errors.New("aws.authorizeToken; invalid aws token"),
 			}
 		},
 		"fail/invalid-audience": func(t *testing.T) test {
@@ -361,7 +361,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid token - invalid audience claim (aud)"),
+				err:   errors.New("aws.authorizeToken; invalid token - invalid audience claim (aud)"),
 			}
 		},
 		"fail/invalid-subject-disabled-custom-SANs": func(t *testing.T) test {
@@ -377,7 +377,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid token - invalid subject claim (sub)"),
+				err:   errors.New("aws.authorizeToken; invalid token - invalid subject claim (sub)"),
 			}
 		},
 		"fail/invalid-account-id": func(t *testing.T) test {
@@ -392,7 +392,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: invalid aws identity document - accountId is not valid"),
+				err:   errors.New("aws.authorizeToken; invalid aws identity document - accountId is not valid"),
 			}
 		},
 		"fail/instance-age": func(t *testing.T) test {
@@ -408,7 +408,7 @@ func TestAWS_authorizeToken(t *testing.T) {
 				p:     p,
 				token: tok,
 				code:  http.StatusUnauthorized,
-				err:   errors.New("authorizeToken: aws identity document pendingTime is too old"),
+				err:   errors.New("aws.authorizeToken; aws identity document pendingTime is too old"),
 			}
 		},
 	}
@@ -643,8 +643,7 @@ func TestAWS_AuthorizeSSHSign(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx := NewContextWithMethod(context.Background(), SignSSHMethod)
-			got, err := tt.aws.AuthorizeSSHSign(ctx, tt.args.token)
+			got, err := tt.aws.AuthorizeSSHSign(context.Background(), tt.args.token)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("AWS.AuthorizeSSHSign() error = %v, wantErr %v", err, tt.wantErr)
 				return

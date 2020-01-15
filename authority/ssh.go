@@ -168,7 +168,8 @@ func (a *Authority) GetSSHConfig(typ string, data map[string]string) ([]template
 // hostname.
 func (a *Authority) GetSSHBastion(user string, hostname string) (*Bastion, error) {
 	if a.sshBastionFunc != nil {
-		return a.sshBastionFunc(user, hostname)
+		bs, err := a.sshBastionFunc(user, hostname)
+		return bs, errs.Wrap(http.StatusInternalServerError, err, "authority.GetSSHBastion")
 	}
 	if a.config.SSH != nil {
 		if a.config.SSH.Bastion != nil && a.config.SSH.Bastion.Hostname != "" {
@@ -176,7 +177,7 @@ func (a *Authority) GetSSHBastion(user string, hostname string) (*Bastion, error
 		}
 		return nil, nil
 	}
-	return nil, errs.NotFound(errors.New("getSSHBastion: ssh is not configured"))
+	return nil, errs.NotFound(errors.New("authority.GetSSHBastion; ssh is not configured"))
 }
 
 // SignSSH creates a signed SSH certificate with the given public key and options.

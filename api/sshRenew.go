@@ -46,7 +46,7 @@ func (h *caHandler) SSHRenew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ctx := provisioner.NewContextWithMethod(context.Background(), provisioner.RenewSSHMethod)
+	ctx := provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRenewMethod)
 	_, err := h.Authority.Authorize(ctx, body.OTT)
 	if err != nil {
 		WriteError(w, errs.Unauthorized(err))

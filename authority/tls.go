@@ -14,6 +14,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/smallstep/certificates/authority/provisioner"
 	"github.com/smallstep/certificates/db"
+	"github.com/smallstep/certificates/errs"
 	"github.com/smallstep/cli/crypto/pemutil"
 	"github.com/smallstep/cli/crypto/tlsutil"
 	"github.com/smallstep/cli/crypto/x509util"
@@ -60,7 +61,7 @@ func withDefaultASN1DN(def *x509util.ASN1DN) x509util.WithOption {
 // Sign creates a signed certificate from a certificate signing request.
 func (a *Authority) Sign(csr *x509.CertificateRequest, signOpts provisioner.Options, extraOpts ...provisioner.SignOption) ([]*x509.Certificate, error) {
 	var (
-		errContext     = apiCtx{"csr": csr, "signOptions": signOpts}
+		opts           = []errs.Option{errs.WithKeyVal("csr", csr), errs.WithKeyVal("signOptions", signOpts)}
 		mods           = []x509util.WithOption{withDefaultASN1DN(a.config.AuthorityConfig.Template)}
 		certValidators = []provisioner.CertificateValidator{}
 		issIdentity    = a.intermediateIdentity
@@ -75,54 +76,52 @@ func (a *Authority) Sign(csr *x509.CertificateRequest, signOpts provisioner.Opti
 			certValidators = append(certValidators, k)
 		case provisioner.CertificateRequestValidator:
 			if err := k.Valid(csr); err != nil {
-				return nil, &apiError{errors.Wrap(err, "sign"), http.StatusUnauthorized, errContext}
+				return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.Sign", opts...)
 			}
 		case provisioner.ProfileModifier:
 			mods = append(mods, k.Option(signOpts))
 		default:
-			return nil, &apiError{errors.Errorf("sign: invalid extra option type %T", k),
-				http.StatusInternalServerError, errContext}
+			return nil, errs.InternalServerError(errors.Errorf("authority.Sign; invalid extra option type %T", k), opts...)
 		}
 	}
 
 	if err := csr.CheckSignature(); err != nil {
-		return nil, &apiError{errors.Wrap(err, "sign: invalid certificate request"),
-			http.StatusBadRequest, errContext}
+		return nil, errs.Wrap(http.StatusBadRequest, err, "authority.Sign; invalid certificate request", opts...)
 	}
 
 	leaf, err := x509util.NewLeafProfileWithCSR(csr, issIdentity.Crt, issIdentity.Key, mods...)
 	if err != nil {
-		return nil, &apiError{errors.Wrapf(err, "sign"), http.StatusInternalServerError, errContext}
+		return nil, errs.Wrap(http.StatusInternalServerError, err, "authroity.Sign", opts...)
 	}
 
 	for _, v := range certValidators {
 		if err := v.Valid(leaf.Subject()); err != nil {
-			return nil, &apiError{errors.Wrap(err, "sign"), http.StatusUnauthorized, errContext}
+			return nil, errs.Wrap(http.StatusUnauthorized, err, "authority.Sign", opts...)
 		}
 	}
 
 	crtBytes, err := leaf.CreateCertificate()
 	if err != nil {
-		return nil, &apiError{errors.Wrap(err, "sign: error creating new leaf certificate"),
-			http.StatusInternalServerError, errContext}
+		return nil, errs.Wrap(http.StatusInternalServerError, err,
+			"authority.Sign; error creating new leaf certificate", opts...)
 	}
 
 	serverCert, err := x509.ParseCertificate(crtBytes)
 	if err != nil {
-		return nil, &apiError{errors.Wrap(err, "sign: error parsing new leaf certificate"),
-			http.StatusInternalServerError, errContext}
+		return nil, errs.Wrap(http.StatusInternalServerError, err,
+			"authority.Sign; error parsing new leaf certificate", opts...)
 	}
 
 	caCert, err := x509.ParseCertificate(issIdentity.Crt.Raw)
 	if err != nil {
-		return nil, &apiError{errors.Wrap(err, "sign: error parsing intermediate certificate"),
-			http.StatusInternalServerError, errContext}
+		return nil, errs.Wrap(http.StatusInternalServerError, err,
+			"authority.Sign; error parsing intermediate certificate", opts...)
 	}
 
 	if err = a.db.StoreCertificate(serverCert); err != nil {
 		if err != db.ErrNotImplemented {
-			return nil, &apiError{errors.Wrap(err, "sign: error storing certificate in db"),
-				http.StatusInternalServerError, errContext}
+			return nil, errs.Wrap(http.StatusInternalServerError, err,
+				"authority.Sign: error storing certificate in db", opts...)
 		}
 	}
 
@@ -156,15 +155,15 @@ func (a *Authority) Renew(oldCert *x509.Certificate) ([]*x509.Certificate, error
 		ExtKeyUsage:                 oldCert.ExtKeyUsage,
 		UnknownExtKeyUsage:          oldCert.UnknownExtKeyUsage,
 		BasicConstraintsValid:       oldCert.BasicConstraintsValid,
-		IsCA:                        oldCert.IsCA,
-		MaxPathLen:                  oldCert.MaxPathLen,
-		MaxPathLenZero:              oldCert.MaxPathLenZero,
-		OCSPServer:                  oldCert.OCSPServer,
-		IssuingCertificateURL:       oldCert.IssuingCertificateURL,
-		DNSNames:                    oldCert.DNSNames,
-		EmailAddresses:              oldCert.EmailAddresses,
-		IPAddresses:                 oldCert.IPAddresses,
-		URIs:                        oldCert.URIs,
+		IsCA:                  oldCert.IsCA,
+		MaxPathLen:            oldCert.MaxPathLen,
+		MaxPathLenZero:        oldCert.MaxPathLenZero,
+		OCSPServer:            oldCert.OCSPServer,
+		IssuingCertificateURL: oldCert.IssuingCertificateURL,
+		DNSNames:              oldCert.DNSNames,
+		EmailAddresses:        oldCert.EmailAddresses,
+		IPAddresses:           oldCert.IPAddresses,
+		URIs:                  oldCert.URIs,
 		PermittedDNSDomainsCritical: oldCert.PermittedDNSDomainsCritical,
 		PermittedDNSDomains:         oldCert.PermittedDNSDomains,
 		ExcludedDNSDomains:          oldCert.ExcludedDNSDomains,
@@ -305,7 +304,7 @@ func (a *Authority) Revoke(ctx context.Context, opts *RevokeOptions) error {
 	rci.ProvisionerID = p.GetID()
 	errContext["provisionerID"] = rci.ProvisionerID
 
-	if provisioner.MethodFromContext(ctx) == provisioner.RevokeSSHMethod {
+	if provisioner.MethodFromContext(ctx) == provisioner.SSHRevokeMethod {
 		err = a.db.RevokeSSH(rci)
 	} else { // default to revoke x509
 		err = a.db.Revoke(rci)

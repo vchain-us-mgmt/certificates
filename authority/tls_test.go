@@ -77,7 +77,7 @@ func getCSR(t *testing.T, priv interface{}, opts ...func(*x509.CertificateReques
 	return csr
 }
 
-func TestSign(t *testing.T) {
+func TestAuthoritySign(t *testing.T) {
 	pub, priv, err := keys.GenerateDefaultKeyPair()
 	assert.FatalError(t, err)
 

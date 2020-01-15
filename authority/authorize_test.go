@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"strconv"
 	"testing"
@@ -274,10 +275,6 @@ func TestAuthority_authorizeToken(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -332,7 +329,7 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 			return &authorizeTest{
 				auth:  a,
 				token: raw,
-				err:   errors.New("authority.authorizeRevoke: jwk.AuthorizeRevoke: jwk.AuthorizeToken; jwk token subject cannot be empty"),
+				err:   errors.New("authority.authorizeRevoke: jwk.AuthorizeRevoke: jwk.authorizeToken; jwk token subject cannot be empty"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -364,10 +361,6 @@ func TestAuthority_authorizeRevoke(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				assert.Nil(t, tc.err)
@@ -420,7 +413,7 @@ func TestAuthority_authorizeSign(t *testing.T) {
 			return &authorizeTest{
 				auth:  a,
 				token: raw,
-				err:   errors.New("authority.authorizeSign: jwk.AuthorizeSign: jwk.AuthorizeSign; jwk token subject cannot be empty"),
+				err:   errors.New("authority.authorizeSign: jwk.AuthorizeSign: jwk.authorizeToken; jwk token subject cannot be empty"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -453,10 +446,6 @@ func TestAuthority_authorizeSign(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -478,56 +467,229 @@ func TestAuthority_Authorize(t *testing.T) {
 	assert.FatalError(t, err)
 
 	now := time.Now().UTC()
-
 	validIssuer := "step-cli"
-	validAudience := []string{"https://test.ca.smallstep.com/sign"}
 
 	type authorizeTest struct {
 		auth  *Authority
 		token string
-		err   *apiError
+		ctx   context.Context
+		err   error
+		code  int
 	}
 	tests := map[string]func(t *testing.T) *authorizeTest{
-		"fail/invalid-token": func(t *testing.T) *authorizeTest {
+		"default-to-signMethod": func(t *testing.T) *authorizeTest {
 			return &authorizeTest{
 				auth:  a,
 				token: "foo",
-				err: &apiError{errors.New("authorizeSign: authority.authorizeToken: error parsing token"),
-					http.StatusUnauthorized, apiCtx{"token": "foo"}},
+				ctx:   context.Background(),
+				err:   errors.New("authority.Authorize: authority.authorizeSign: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
 			}
 		},
-		"fail/invalid-subject": func(t *testing.T) *authorizeTest {
-			cl := jwt.Claims{
-				Subject:   "",
-				Issuer:    validIssuer,
-				NotBefore: jwt.NewNumericDate(now),
-				Expiry:    jwt.NewNumericDate(now.Add(time.Minute)),
-				Audience:  validAudience,
-				ID:        "43",
-			}
-			raw, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
-			assert.FatalError(t, err)
+		"fail/sign/invalid-token": func(t *testing.T) *authorizeTest {
 			return &authorizeTest{
 				auth:  a,
-				token: raw,
-				err: &apiError{errors.New("authorizeSign: token subject cannot be empty"),
-					http.StatusUnauthorized, apiCtx{"token": raw}},
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SignMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeSign: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
 			}
 		},
-		"ok": func(t *testing.T) *authorizeTest {
+		"ok/sign": func(t *testing.T) *authorizeTest {
 			cl := jwt.Claims{
 				Subject:   "test.smallstep.com",
 				Issuer:    validIssuer,
 				NotBefore: jwt.NewNumericDate(now),
 				Expiry:    jwt.NewNumericDate(now.Add(time.Minute)),
-				Audience:  validAudience,
-				ID:        "44",
+				Audience:  testAudiences.Sign,
+				ID:        "1",
 			}
-			raw, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+			token, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+			assert.FatalError(t, err)
+			return &authorizeTest{
+				auth:  a,
+				token: token,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SignMethod),
+			}
+		},
+		"fail/revoke/invalid-token": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.RevokeMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeRevoke: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
+			}
+		},
+		"ok/revoke": func(t *testing.T) *authorizeTest {
+			cl := jwt.Claims{
+				Subject:   "test.smallstep.com",
+				Issuer:    validIssuer,
+				NotBefore: jwt.NewNumericDate(now),
+				Expiry:    jwt.NewNumericDate(now.Add(time.Minute)),
+				Audience:  testAudiences.Revoke,
+				ID:        "2",
+			}
+			token, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+			assert.FatalError(t, err)
+			return &authorizeTest{
+				auth:  a,
+				token: token,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.RevokeMethod),
+			}
+		},
+		"fail/sshSign/invalid-token": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHSignMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeSSHSign: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
+			}
+		},
+		"fail/sshSign/disabled": func(t *testing.T) *authorizeTest {
+			_a := testAuthority(t)
+			_a.sshCAHostCertSignKey = nil
+			_a.sshCAUserCertSignKey = nil
+			return &authorizeTest{
+				auth:  _a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHSignMethod),
+				err:   errors.New("authority.Authorize; ssh certificate flows are not enabled"),
+				code:  http.StatusNotImplemented,
+			}
+		},
+		"ok/sshSign": func(t *testing.T) *authorizeTest {
+			raw, err := generateSimpleSSHUserToken(validIssuer, testAudiences.SSHSign[0], jwk)
 			assert.FatalError(t, err)
 			return &authorizeTest{
 				auth:  a,
 				token: raw,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHSignMethod),
+			}
+		},
+		"fail/sshRenew/invalid-token": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRenewMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeSSHRenew: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
+			}
+		},
+		"fail/sshRenew/disabled": func(t *testing.T) *authorizeTest {
+			_a := testAuthority(t)
+			_a.sshCAHostCertSignKey = nil
+			_a.sshCAUserCertSignKey = nil
+			return &authorizeTest{
+				auth:  _a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRenewMethod),
+				err:   errors.New("authority.Authorize; ssh certificate flows are not enabled"),
+				code:  http.StatusNotImplemented,
+			}
+		},
+		"ok/sshRenew": func(t *testing.T) *authorizeTest {
+			key, err := pemutil.Read("./testdata/secrets/ssh_host_ca_key")
+			assert.FatalError(t, err)
+			signer, ok := key.(crypto.Signer)
+			assert.Fatal(t, ok, "could not cast ssh signing key to crypto signer")
+			sshSigner, err := ssh.NewSignerFromSigner(signer)
+			assert.FatalError(t, err)
+
+			cert, _jwk, err := createSSHCert(&ssh.Certificate{CertType: ssh.HostCert}, sshSigner)
+			assert.FatalError(t, err)
+
+			p, ok := a.provisioners.Load("sshpop/sshpop")
+			assert.Fatal(t, ok, "sshpop provisioner not found in test authority")
+
+			tok, err := generateToken("foo", p.GetName(), testAudiences.SSHRenew[0]+"#sshpop/sshpop",
+				[]string{"foo.smallstep.com"}, now, _jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+			return &authorizeTest{
+				auth:  a,
+				token: tok,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRenewMethod),
+			}
+		},
+		"fail/sshRevoke/invalid-token": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRevokeMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeSSHRevoke: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
+			}
+		},
+		"ok/sshRevoke": func(t *testing.T) *authorizeTest {
+			cl := jwt.Claims{
+				Subject:   "test.smallstep.com",
+				Issuer:    validIssuer,
+				NotBefore: jwt.NewNumericDate(now),
+				Expiry:    jwt.NewNumericDate(now.Add(time.Minute)),
+				Audience:  testAudiences.SSHRevoke,
+				ID:        "3",
+			}
+			token, err := jwt.Signed(sig).Claims(cl).CompactSerialize()
+			assert.FatalError(t, err)
+			return &authorizeTest{
+				auth:  a,
+				token: token,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRevokeMethod),
+			}
+		},
+		"fail/sshRekey/invalid-token": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRekeyMethod),
+				err:   errors.New("authority.Authorize: authority.authorizeSSHRekey: authority.authorizeToken: error parsing token"),
+				code:  http.StatusUnauthorized,
+			}
+		},
+		"fail/sshRekey/disabled": func(t *testing.T) *authorizeTest {
+			_a := testAuthority(t)
+			_a.sshCAHostCertSignKey = nil
+			_a.sshCAUserCertSignKey = nil
+			return &authorizeTest{
+				auth:  _a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRekeyMethod),
+				err:   errors.New("authority.Authorize; ssh certificate flows are not enabled"),
+				code:  http.StatusNotImplemented,
+			}
+		},
+		"ok/sshRekey": func(t *testing.T) *authorizeTest {
+			key, err := pemutil.Read("./testdata/secrets/ssh_host_ca_key")
+			assert.FatalError(t, err)
+			signer, ok := key.(crypto.Signer)
+			assert.Fatal(t, ok, "could not cast ssh signing key to crypto signer")
+			sshSigner, err := ssh.NewSignerFromSigner(signer)
+			assert.FatalError(t, err)
+
+			cert, _jwk, err := createSSHCert(&ssh.Certificate{CertType: ssh.HostCert}, sshSigner)
+			assert.FatalError(t, err)
+
+			p, ok := a.provisioners.Load("sshpop/sshpop")
+			assert.Fatal(t, ok, "sshpop provisioner not found in test authority")
+
+			tok, err := generateToken("foo", p.GetName(), testAudiences.SSHRekey[0]+"#sshpop/sshpop",
+				[]string{"foo.smallstep.com"}, now, _jwk, withSSHPOPFile(cert))
+			assert.FatalError(t, err)
+
+			return &authorizeTest{
+				auth:  a,
+				token: tok,
+				ctx:   provisioner.NewContextWithMethod(context.Background(), provisioner.SSHRekeyMethod),
+			}
+		},
+		"fail/unexpected-method": func(t *testing.T) *authorizeTest {
+			return &authorizeTest{
+				auth:  a,
+				token: "foo",
+				ctx:   provisioner.NewContextWithMethod(context.Background(), 15),
+				err:   errors.New("authority.Authorize; method 15 is not supported"),
+				code:  http.StatusInternalServerError,
 			}
 		},
 	}
@@ -535,24 +697,21 @@ func TestAuthority_Authorize(t *testing.T) {
 	for name, genTestCase := range tests {
 		t.Run(name, func(t *testing.T) {
 			tc := genTestCase(t)
-			ctx := provisioner.NewContextWithMethod(context.Background(), provisioner.SignMethod)
-			got, err := tc.auth.Authorize(ctx, tc.token)
+			got, err := tc.auth.Authorize(tc.ctx, tc.token)
 			if err != nil {
-				if assert.NotNil(t, tc.err) {
+				if assert.NotNil(t, tc.err, fmt.Sprintf("unexpected error: %s", err)) {
 					assert.Nil(t, got)
-					switch v := err.(type) {
-					case *apiError:
-						assert.HasPrefix(t, v.err.Error(), tc.err.Error())
-						assert.Equals(t, v.code, tc.err.code)
-						assert.Equals(t, v.context, tc.err.context)
-					default:
-						t.Errorf("unexpected error type: %T", v)
-					}
+					sc, ok := err.(errs.StatusCoder)
+					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
+					assert.Equals(t, sc.StatusCode(), tc.code)
+					assert.HasPrefix(t, err.Error(), tc.err.Error())
+
+					ctxErr, ok := err.(*errs.Error)
+					assert.Fatal(t, ok, "error is not of type *errs.Error")
+					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
-				if assert.Nil(t, tc.err) {
-					assert.Len(t, 8, got)
-				}
+				assert.Nil(t, tc.err)
 			}
 		})
 	}
@@ -783,7 +942,7 @@ func TestAuthority_authorizeSSHSign(t *testing.T) {
 			return &authorizeTest{
 				auth:  a,
 				token: raw,
-				err:   errors.New("authority.authorizeSSHSign: jwk.AuthorizeSSHSign: jwk.AuthorizeToken; jwk token subject cannot be empty"),
+				err:   errors.New("authority.authorizeSSHSign: jwk.AuthorizeSSHSign: jwk.authorizeToken; jwk token subject cannot be empty"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -808,10 +967,6 @@ func TestAuthority_authorizeSSHSign(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -907,10 +1062,6 @@ func TestAuthority_authorizeSSHRenew(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
@@ -971,7 +1122,7 @@ func TestAuthority_authorizeSSHRevoke(t *testing.T) {
 			return &authorizeTest{
 				auth:  a,
 				token: raw,
-				err:   errors.New("authority.authorizeSSHRevoke: jwk.AuthorizeSSHRevoke: jwk.AuthorizeToken; jwk token subject cannot be empty"),
+				err:   errors.New("authority.authorizeSSHRevoke: jwk.AuthorizeSSHRevoke: jwk.authorizeToken; jwk token subject cannot be empty"),
 				code:  http.StatusUnauthorized,
 			}
 		},
@@ -1011,10 +1162,6 @@ func TestAuthority_authorizeSSHRevoke(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				assert.Nil(t, tc.err)
@@ -1108,10 +1255,6 @@ func TestAuthority_authorizeSSHRekey(t *testing.T) {
 					assert.Fatal(t, ok, "error does not implement StatusCoder interface")
 					assert.Equals(t, sc.StatusCode(), tc.code)
 					assert.HasPrefix(t, err.Error(), tc.err.Error())
-
-					ctxErr, ok := err.(*errs.Error)
-					assert.Fatal(t, ok, "error is not of type *errs.Error")
-					assert.Equals(t, ctxErr.Details["token"], tc.token)
 				}
 			} else {
 				if assert.Nil(t, tc.err) {
