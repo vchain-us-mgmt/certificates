@@ -915,7 +915,7 @@ func Test_caHandler_Renew(t *testing.T) {
 		{"ok", cs, parseCertificate(certPEM), parseCertificate(rootPEM), nil, http.StatusCreated},
 		{"no tls", nil, nil, nil, nil, http.StatusBadRequest},
 		{"no peer certificates", &tls.ConnectionState{}, nil, nil, nil, http.StatusBadRequest},
-		{"renew error", cs, nil, nil, fmt.Errorf("an error"), http.StatusForbidden},
+		{"renew error", cs, nil, nil, errs.Forbidden(fmt.Errorf("an error")), http.StatusForbidden},
 	}
 
 	expected := []byte(`{"crt":"` + strings.Replace(certPEM, "\n", `\n`, -1) + `\n","ca":"` + strings.Replace(rootPEM, "\n", `\n`, -1) + `\n","certChain":["` + strings.Replace(certPEM, "\n", `\n`, -1) + `\n","` + strings.Replace(rootPEM, "\n", `\n`, -1) + `\n"]}`)
@@ -935,13 +935,13 @@ func Test_caHandler_Renew(t *testing.T) {
 			res := w.Result()
 
 			if res.StatusCode != tt.statusCode {
-				t.Errorf("caHandler.Root StatusCode = %d, wants %d", res.StatusCode, tt.statusCode)
+				t.Errorf("caHandler.Renew StatusCode = %d, wants %d", res.StatusCode, tt.statusCode)
 			}
 
 			body, err := ioutil.ReadAll(res.Body)
 			res.Body.Close()
 			if err != nil {
-				t.Errorf("caHandler.Root unexpected error = %v", err)
+				t.Errorf("caHandler.Renew unexpected error = %v", err)
 			}
 			if tt.statusCode < http.StatusBadRequest {
 				if !bytes.Equal(bytes.TrimSpace(body), expected) {
